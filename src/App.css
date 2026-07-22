@@ -1,0 +1,27 @@
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.pane {
+  height: 100%;
+  min-width: 0;
+}
+
+.pane--left {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.pane--right {
+  flex: 1;
+  background: var(--bg);
+}

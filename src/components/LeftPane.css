@@ -1,0 +1,7 @@
+.left-pane {
+  height: 100%;
+  min-width: 0;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
