@@ -6,8 +6,8 @@ import './LeftPane.css'
 
 const tabs: TabDef[] = [
   { id: 'projects', label: 'Projects', content: <ProjectsTab /> },
-  { id: 'phrases', label: 'Common phrases', content: <PhrasesTab /> },
   { id: 'future', label: 'Future', content: <FutureTab /> },
+  { id: 'phrases', label: 'Common phrases', content: <PhrasesTab /> },
 ]
 
 /** Left pane: a tab strip over Projects / Common phrases / Future. */

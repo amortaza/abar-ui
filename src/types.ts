@@ -24,3 +24,9 @@ export interface Phrase {
   phrase_id: string
   phrase: string
 }
+
+/** GET /futures returns an array of {future_id, text}. */
+export interface Future {
+  future_id: string
+  text: string
+}
