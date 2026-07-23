@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { deletePhrase, fetchPhrases, upsertPhrase } from '../../api'
+import { subscribe } from '../../events'
 import type { Phrase } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
 import './PhrasesTab.css'
@@ -16,6 +17,16 @@ export default function PhrasesTab() {
   const [query, setQuery] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const editRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-grow the edit textarea: shrink to content, then re-grow up to the
+  // CSS max-height (11 lines). The browser clamps via min/max-height.
+  const autosize = useCallback(() => {
+    const el = editRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [])
 
   const load = useCallback(async (projectId: string) => {
     setLoading(true)
@@ -34,14 +45,25 @@ export default function PhrasesTab() {
     else setPhrases([])
   }, [currentProject, load])
 
+  // Live-refresh: reload when phrases for this project change anywhere
+  // (another tab/client or an out-of-band backend write).
+  useEffect(() => {
+    if (!currentProject) return
+    return subscribe((e) => {
+      if (e.type === 'phrases' && e.project_id === currentProject) void load(currentProject)
+    })
+  }, [currentProject, load])
+
   const queryLower = query.trim().toLowerCase()
-  const filtered = useMemo(
-    () =>
-      queryLower
-        ? phrases.filter((p) => p.phrase.toLowerCase().includes(queryLower))
-        : phrases,
-    [phrases, queryLower],
-  )
+  const filtered = useMemo(() => {
+    const base = queryLower
+      ? phrases.filter((p) => p.phrase.toLowerCase().includes(queryLower))
+      : phrases
+    // Sort alphabetically, ignoring case (matches the filter's casing).
+    return [...base].sort((a, b) =>
+      a.phrase.toLowerCase().localeCompare(b.phrase.toLowerCase()),
+    )
+  }, [phrases, queryLower])
 
   const handleAdd = async () => {
     if (!currentProject) return
@@ -140,13 +162,17 @@ export default function PhrasesTab() {
             <li key={p.phrase_id} className="phrases-row">
               {editingId === p.phrase_id ? (
                 <>
-                  <input
-                    className="phrases-input phrases-input--inline"
+                  <textarea
+                    ref={editRef}
+                    className="phrases-input phrases-input--inline phrases-input--editor"
                     autoFocus
+                    rows={3}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
+                    onInput={autosize}
+                    onFocus={autosize}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault()
                         void commitEdit(p.phrase_id)
                       } else if (e.key === 'Escape') {
@@ -177,21 +203,21 @@ export default function PhrasesTab() {
                   <span className="phrases-text">{p.phrase}</span>
                   <span className="phrases-actions">
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--sm icon-btn--edit"
                       title="Edit"
                       onClick={() => startEdit(p)}
                     >
                       <EditIcon />
                     </button>
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--sm icon-btn--copy"
                       title="Copy"
                       onClick={() => void handleCopy(p)}
                     >
                       <CopyIcon />
                     </button>
                     <button
-                      className="icon-btn icon-btn--danger"
+                      className="icon-btn icon-btn--sm icon-btn--danger icon-btn--delete"
                       title="Delete"
                       onClick={() => void handleDelete(p)}
                     >

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { deleteFuture, fetchFutures, upsertFuture } from '../../api'
+import { deleteFuture, fetchFutures, reorderFutures, upsertFuture } from '../../api'
+import { subscribe } from '../../events'
 import type { Future } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
 import './FutureTab.css'
@@ -17,6 +18,14 @@ export default function FutureTab() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
+  // Drag-and-drop reordering. Dragging only initiates from the grip handle
+  // (armedId gates the row's draggable attribute) so clicks on the text and
+  // action buttons keep working. dragId is the moving row; overId marks the
+  // drop target for the top-edge indicator.
+  const [armedId, setArmedId] = useState<string | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+
   const load = useCallback(async (projectId: string) => {
     setLoading(true)
     setError(null)
@@ -32,6 +41,17 @@ export default function FutureTab() {
   useEffect(() => {
     if (currentProject) void load(currentProject)
     else setFutures([])
+  }, [currentProject, load])
+
+  // Live-refresh: reload when futures for this project change anywhere
+  // (another tab/client or an out-of-band backend write). Note this also
+  // echoes the acting client's own reorder/edit; that harmless extra reload
+  // preserves server-confirmed order after remote changes.
+  useEffect(() => {
+    if (!currentProject) return
+    return subscribe((e) => {
+      if (e.type === 'futures' && e.project_id === currentProject) void load(currentProject)
+    })
   }, [currentProject, load])
 
   const queryLower = query.trim().toLowerCase()
@@ -101,6 +121,34 @@ export default function FutureTab() {
     }
   }
 
+  // Drop the dragged row (dragId) onto the target row (overId): move it to
+  // the target's position in the full futures array, persist the new order,
+  // and reset drag state. On error, reload from the server to revert.
+  const handleDrop = async () => {
+    const fromId = dragId
+    const toId = overId
+    setArmedId(null)
+    setDragId(null)
+    setOverId(null)
+    if (!currentProject || !fromId || !toId || fromId === toId) return
+
+    const fromIndex = futures.findIndex((f) => f.future_id === fromId)
+    const toIndex = futures.findIndex((f) => f.future_id === toId)
+    if (fromIndex === -1 || toIndex === -1) return
+
+    const next = [...futures]
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    setFutures(next)
+
+    try {
+      await reorderFutures(currentProject, next.map((f) => f.future_id))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      await load(currentProject)
+    }
+  }
+
   if (!currentProject) {
     return (
       <section className="future-tab">
@@ -137,7 +185,29 @@ export default function FutureTab() {
       {filtered.length > 0 && (
         <ul className="future-list">
           {filtered.map((f) => (
-            <li key={f.future_id} className="future-row">
+            <li
+              key={f.future_id}
+              className={
+                'future-row' +
+                (dragId === f.future_id ? ' future-row--dragging' : '') +
+                (overId === f.future_id ? ' future-row--over' : '')
+              }
+              draggable={armedId === f.future_id}
+              onDragStart={() => setDragId(f.future_id)}
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (dragId && f.future_id !== dragId) setOverId(f.future_id)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                void handleDrop()
+              }}
+              onDragEnd={() => {
+                setArmedId(null)
+                setDragId(null)
+                setOverId(null)
+              }}
+            >
               {editingId === f.future_id ? (
                 <>
                   <input
@@ -174,24 +244,37 @@ export default function FutureTab() {
                 </>
               ) : (
                 <>
+                  {/* Grip armes the row for dragging. Hidden while a filter
+                      is active, since reordering a filtered subset is
+                      ambiguous; dropped rows move within the full list. */}
+                  {!query.trim() && (
+                    <span
+                      className="future-grip"
+                      title="Drag to reorder"
+                      onMouseDown={() => setArmedId(f.future_id)}
+                      onMouseUp={() => setArmedId(null)}
+                    >
+                      <GripIcon />
+                    </span>
+                  )}
                   <span className="future-text">{f.text}</span>
                   <span className="future-actions">
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--sm icon-btn--edit"
                       title="Edit"
                       onClick={() => startEdit(f)}
                     >
                       <EditIcon />
                     </button>
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--sm icon-btn--copy"
                       title="Copy"
                       onClick={() => void handleCopy(f)}
                     >
                       <CopyIcon />
                     </button>
                     <button
-                      className="icon-btn icon-btn--danger"
+                      className="icon-btn icon-btn--sm icon-btn--danger icon-btn--delete"
                       title="Delete"
                       onClick={() => void handleDelete(f)}
                     >
@@ -209,6 +292,14 @@ export default function FutureTab() {
 }
 
 // ---- Icons (inline SVG keeps the app dependency-free) ----
+
+function GripIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M5 3.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Zm0 4.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0ZM3.75 13.5a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5ZM13.5 3.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Zm-1.25 5.75a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5ZM13.5 12.25a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z" />
+    </svg>
+  )
+}
 
 function EditIcon() {
   return (

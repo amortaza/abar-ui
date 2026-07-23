@@ -66,6 +66,40 @@
   background: var(--surface-2);
 }
 
+/* Line separator between rows (skip the last). */
+.future-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Grip handle arms a row for dragging (see FutureTab.tsx). */
+.future-grip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  cursor: grab;
+  padding-right: 2px;
+}
+
+.future-grip:active {
+  cursor: grabbing;
+}
+
+.future-grip:hover {
+  color: var(--text);
+}
+
+/* Drag source fades while it's being dragged. */
+.future-row--dragging {
+  opacity: 0.4;
+}
+
+/* Drop target gets a top-edge indicator. box-shadow avoids the layout
+   shift a real border would cause against the row separator above. */
+.future-row--over {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
 .future-row:hover .future-actions {
   opacity: 1;
 }
@@ -115,4 +149,30 @@
 
 .icon-btn--danger:hover {
   color: #f85149;
+}
+
+/* Smaller icons for the edit/copy/delete row actions (~35% smaller). */
+.icon-btn--sm svg {
+  width: 9px;
+  height: 9px;
+}
+
+/* Edit icon sized to 16px.
+   Scoped under .future-row for specificity so it beats the shared
+   .icon-btn--sm svg rule bundled from other tab stylesheets. */
+.future-row .icon-btn--edit svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Delete icon sized to 16px. */
+.future-row .icon-btn--delete svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Copy icon sized to 16px. */
+.future-row .icon-btn--copy svg {
+  width: 16px;
+  height: 16px;
 }

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPrompt, deletePrompt, fetchPrompts } from '../../api'
+import { subscribe } from '../../events'
+import { renderMarkdown } from '../../markdown'
 import type { Prompt } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
 import './PromptsTab.css'
@@ -34,6 +36,16 @@ export default function PromptsTab() {
   // reloading the page starts a new session.
   const [sessionId] = useState(() => crypto.randomUUID())
 
+  // Auto-grow the prompt textarea: shrink to content, then re-grow up to the
+  // CSS max-height (15 lines). The browser clamps via min/max-height.
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const autosize = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [])
+
   const load = useCallback(async (projectId: string) => {
     setError(null)
     try {
@@ -48,6 +60,16 @@ export default function PromptsTab() {
     else setPrompts([])
   }, [currentProject, load])
 
+  // Live-refresh: reload when any prompts file for this project changes
+  // (across clients/tabs/out-of-band). Prompts are fetched across all
+  // platforms, so a change to any platform file triggers one reload.
+  useEffect(() => {
+    if (!currentProject) return
+    return subscribe((e) => {
+      if (e.type === 'prompts' && e.project_id === currentProject) void load(currentProject)
+    })
+  }, [currentProject, load])
+
   const targets = useMemo(() => resolveTargets(platform), [platform])
 
   // GET /prompts returns prompts across all platforms; filter client-side
@@ -59,6 +81,9 @@ export default function PromptsTab() {
       ),
     [prompts, targets],
   )
+
+  // Live, sanitized markdown preview of the prompt being typed.
+  const previewHtml = useMemo(() => renderMarkdown(prompt), [prompt])
 
   const submit = async () => {
     if (!currentProject) return
@@ -167,20 +192,38 @@ export default function PromptsTab() {
         ))}
       </fieldset>
 
-      <input
-        className="prompts-input"
-        placeholder="Enter a prompt…"
-        value={prompt}
-        autoFocus
-        disabled={busy}
-        onChange={(e) => setPrompt(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            void submit()
-          }
-        }}
-      />
+      <div className="prompts-editor">
+        <textarea
+          ref={textareaRef}
+          className="prompts-input prompts-input--editor"
+          placeholder="Enter a prompt…  (Cmd/Ctrl+Enter to submit)"
+          value={prompt}
+          autoFocus
+          rows={3}
+          disabled={busy}
+          onChange={(e) => setPrompt(e.target.value)}
+          onInput={autosize}
+          onFocus={autosize}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              void submit()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              setPrompt('')
+            }
+          }}
+        />
+        <div className="prompts-preview">
+          {previewHtml ? (
+            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+          ) : (
+            <span className="prompts-preview-placeholder">
+              Nothing to preview
+            </span>
+          )}
+        </div>
+      </div>
 
       {error && <p className="prompts-error">Error: {error}</p>}
       {busy && <p className="prompts-empty">Saving…</p>}
@@ -243,21 +286,21 @@ export default function PromptsTab() {
                   <span className="prompts-text">{p.prompt}</span>
                   <span className="prompts-actions">
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--edit"
                       title="Edit"
                       onClick={() => startEdit(p)}
                     >
                       <EditIcon />
                     </button>
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--copy"
                       title="Copy"
                       onClick={() => void handleCopy(p)}
                     >
                       <CopyIcon />
                     </button>
                     <button
-                      className="icon-btn icon-btn--danger"
+                      className="icon-btn icon-btn--danger icon-btn--delete"
                       title="Delete"
                       onClick={() => void handleDelete(p)}
                     >

@@ -33,6 +33,16 @@
   min-width: 0;
 }
 
+/* Multi-line edit textarea: starts 3 lines tall, grows to 11, then scrolls. */
+.phrases-input--editor {
+  resize: none;
+  line-height: 1.4;
+  min-height: calc(1.4em * 3 + 12px); /* 3 lines + top/bottom padding */
+  max-height: calc(1.4em * 11 + 12px); /* 11 lines + top/bottom padding */
+  overflow-y: auto;
+  font-family: inherit;
+}
+
 .phrases-empty,
 .phrases-error {
   color: var(--text-muted);
@@ -66,8 +76,18 @@
   background: var(--surface-2);
 }
 
+/* Line separator between rows (skip the last). */
+.phrases-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
 .phrases-row:hover .phrases-actions {
   opacity: 1;
+}
+
+/* Top-align the editor so save/cancel sit beside the first line. */
+.phrases-row:focus-within {
+  align-items: flex-start;
 }
 
 .phrases-text {
@@ -115,4 +135,30 @@
 
 .icon-btn--danger:hover {
   color: #f85149;
+}
+
+/* Smaller icons for the edit/copy/delete row actions (~35% smaller). */
+.icon-btn--sm svg {
+  width: 9px;
+  height: 9px;
+}
+
+/* Edit icon sized to 16px.
+   Scoped under .phrases-row for specificity so it beats the shared
+   .icon-btn--sm svg rule bundled from other tab stylesheets. */
+.phrases-row .icon-btn--edit svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Delete icon sized to 16px. */
+.phrases-row .icon-btn--delete svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Copy icon sized to 16px. */
+.phrases-row .icon-btn--copy svg {
+  width: 16px;
+  height: 16px;
 }

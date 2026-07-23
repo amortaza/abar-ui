@@ -6,6 +6,7 @@ import {
   fetchProjects,
   renameProject,
 } from '../../api'
+import { subscribe } from '../../events'
 import './ProjectsTab.css'
 
 /** "Projects" tab: CRUD over project IDs (folder names). */
@@ -31,6 +32,12 @@ export default function ProjectsTab() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // Live-refresh: reload the project list when a project is created,
+  // renamed, or deleted anywhere (another tab/client).
+  useEffect(() => subscribe((e) => {
+    if (e.type === 'projects') void load()
+  }), [load])
 
   const handleCreate = async () => {
     const id = window.prompt('New project ID')

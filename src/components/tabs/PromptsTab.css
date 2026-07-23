@@ -53,6 +53,119 @@
   opacity: 0.6;
 }
 
+/* Two-column prompt editor: textarea (left) + markdown preview (right). */
+.prompts-editor {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.prompts-editor > .prompts-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.prompts-editor > .prompts-preview {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Auto-grow textarea: starts 3 lines tall, grows to 15, then scrolls.
+   Mirrors the editor pattern in PhrasesTab.css. */
+.prompts-input--editor {
+  resize: none;
+  line-height: 1.4;
+  min-height: calc(1.4em * 3 + 12px);  /* 3 lines + padding */
+  max-height: calc(1.4em * 15 + 12px); /* 15 lines + padding */
+  overflow-y: auto;
+  font-family: inherit;
+}
+
+/* Markdown preview pane: matches the textarea's min/max-height so the two
+   stay aligned as the textarea grows. Scrolls independently past 15 lines. */
+.prompts-preview {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  min-height: calc(1.4em * 3 + 12px);
+  max-height: calc(1.4em * 15 + 12px);
+  overflow-y: auto;
+}
+
+.prompts-preview-placeholder {
+  color: var(--text-muted);
+}
+
+/* ---- Markdown element styling, scoped to the preview pane ---- */
+.prompts-preview :is(h1, h2, h3, h4) {
+  margin: 0.5em 0 0.3em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.prompts-preview h1 { font-size: 1.3em; }
+.prompts-preview h2 { font-size: 1.15em; }
+.prompts-preview h3,
+.prompts-preview h4 { font-size: 1em; }
+
+.prompts-preview :is(p, ul, ol, blockquote, pre) {
+  margin: 0.4em 0;
+}
+
+.prompts-preview :is(ul, ol) {
+  padding-left: 1.4em;
+}
+
+.prompts-preview li {
+  margin: 0.15em 0;
+}
+
+.prompts-preview a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.prompts-preview a:hover {
+  text-decoration: underline;
+}
+
+.prompts-preview code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--surface);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.prompts-preview pre {
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 8px;
+  overflow-x: auto;
+}
+
+.prompts-preview pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+.prompts-preview blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 0.8em;
+  color: var(--text-muted);
+}
+
+.prompts-preview hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.6em 0;
+}
+
 .prompts-empty,
 .prompts-error {
   color: var(--text-muted);
@@ -84,6 +197,11 @@
 
 .prompts-row:hover {
   background: var(--surface-2);
+}
+
+/* Line separator between rows (skip the last). */
+.prompts-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
 }
 
 .prompts-row:hover .prompts-actions {
@@ -144,6 +262,24 @@
 
 .icon-btn--danger:hover {
   color: #f85149;
+}
+
+/* Edit / copy / delete row-action icons sized to 16px.
+   Scoped under .prompts-row for specificity so they beat the shared
+   .icon-btn svg { 28px } rule above. */
+.prompts-row .icon-btn--edit svg {
+  width: 16px;
+  height: 16px;
+}
+
+.prompts-row .icon-btn--copy svg {
+  width: 16px;
+  height: 16px;
+}
+
+.prompts-row .icon-btn--delete svg {
+  width: 16px;
+  height: 16px;
 }
 
 .prompts-platform-icon {

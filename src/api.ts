@@ -162,3 +162,17 @@ export function deleteFuture(
 ): Promise<{ status: string; future_id: string }> {
   return sendJson(`/api/future?project_id=${encodeURIComponent(projectId)}&future_id=${encodeURIComponent(futureId)}`, 'DELETE')
 }
+
+/**
+ * POST /api/futures/order?project_id=X body {"future_ids": [...]} rewrites
+ * futures.json in the given order. future_ids must be an exact permutation
+ * of the project's current ids (the server rejects otherwise).
+ */
+export function reorderFutures(
+  projectId: string,
+  futureIds: string[],
+): Promise<{ status: string; total: number }> {
+  return sendJson(`/api/futures/order?project_id=${encodeURIComponent(projectId)}`, 'POST', {
+    future_ids: futureIds,
+  })
+}
