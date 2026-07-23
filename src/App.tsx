@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CurrentProjectProvider } from './components/CurrentProjectProvider'
 import Header from './components/Header'
 import LeftPane from './components/LeftPane'
+import RightPane from './components/RightPane'
 import Splitter from './components/Splitter'
 import './App.css'
 
@@ -18,7 +19,9 @@ export default function App() {
             <LeftPane />
           </div>
           <Splitter width={leftWidth} onResize={setLeftWidth} />
-          <div className="pane pane--right" />
+          <div className="pane pane--right">
+            <RightPane />
+          </div>
         </div>
       </div>
     </CurrentProjectProvider>

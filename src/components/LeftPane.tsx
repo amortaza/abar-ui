@@ -10,7 +10,7 @@ const tabs: TabDef[] = [
   { id: 'phrases', label: 'Common phrases', content: <PhrasesTab /> },
 ]
 
-/** Left pane: a tab strip over Projects / Common phrases / Future. */
+/** Left pane: a tab strip over Projects / Future / Common phrases. */
 export default function LeftPane() {
   return (
     <div className="left-pane">

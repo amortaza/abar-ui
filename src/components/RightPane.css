@@ -1,0 +1,7 @@
+.right-pane {
+  height: 100%;
+  min-width: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}

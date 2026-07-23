@@ -66,6 +66,41 @@ export function fetchPrompts(projectId: string): Promise<Prompt[]> {
   return getJson(`/api/prompts?project_id=${encodeURIComponent(projectId)}`)
 }
 
+/**
+ * POST /api/prompt?project_id=X&platform=Y. The server requires all of
+ * project_id, session_id, prompt_id, state, prompt, and platform;
+ * project_id and platform are passed as query params, the remaining
+ * per-prompt fields via the body.
+ */
+export interface NewPromptBody {
+  session_id: string
+  prompt_id: string
+  state: string
+  prompt: string
+}
+
+export function createPrompt(
+  projectId: string,
+  platform: string,
+  body: NewPromptBody,
+): Promise<{ status: string; prompt_id: string }> {
+  const qs = `?project_id=${encodeURIComponent(projectId)}&platform=${encodeURIComponent(platform)}`
+  return sendJson(`/api/prompt${qs}`, 'POST', body)
+}
+
+/** DELETE /api/prompt?project_id=X&platform=Y&prompt_id=Z -> {"status": "deleted" | "not_found", ...} */
+export function deletePrompt(
+  projectId: string,
+  platform: string,
+  promptId: string,
+): Promise<{ status: string; prompt_id: string }> {
+  const qs =
+    `?project_id=${encodeURIComponent(projectId)}` +
+    `&platform=${encodeURIComponent(platform)}` +
+    `&prompt_id=${encodeURIComponent(promptId)}`
+  return sendJson(`/api/prompt${qs}`, 'DELETE')
+}
+
 // ---- Phrases ----
 
 /** GET /api/phrases?project_id=X -> Phrase[] */
