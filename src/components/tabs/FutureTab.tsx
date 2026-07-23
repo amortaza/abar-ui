@@ -227,14 +227,14 @@ export default function FutureTab() {
                   />
                   <span className="future-actions">
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--save"
                       title="Save"
                       onClick={() => void commitEdit(f.future_id)}
                     >
                       <SaveIcon />
                     </button>
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--cancel"
                       title="Cancel"
                       onClick={cancelEdit}
                     >

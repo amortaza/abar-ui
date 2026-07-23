@@ -19,6 +19,13 @@
   font-size: 13px;
 }
 
+/* Dark green outline on the toolbar filter box (scoped so the inline edit
+   input and editor, which also use .phrases-input, are unaffected). */
+.phrases-toolbar .phrases-input {
+  outline: 2px solid #2da44e;
+  outline-offset: -1px;
+}
+
 .phrases-input::placeholder {
   color: var(--text-muted);
 }
@@ -146,6 +153,11 @@
 /* Edit icon sized to 16px.
    Scoped under .phrases-row for specificity so it beats the shared
    .icon-btn--sm svg rule bundled from other tab stylesheets. */
+.phrases-row .icon-btn--duplicate svg {
+  width: 16px;
+  height: 16px;
+}
+
 .phrases-row .icon-btn--edit svg {
   width: 16px;
   height: 16px;
@@ -159,6 +171,18 @@
 
 /* Copy icon sized to 16px. */
 .phrases-row .icon-btn--copy svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Save icon (edit-mode) sized to 16px. */
+.phrases-row .icon-btn--save svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Cancel icon (edit-mode) sized to 16px. */
+.phrases-row .icon-btn--cancel svg {
   width: 16px;
   height: 16px;
 }

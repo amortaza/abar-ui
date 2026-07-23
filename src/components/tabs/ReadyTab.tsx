@@ -1,65 +1,55 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPrompt, deletePrompt, fetchPrompts } from '../../api'
 import { subscribe } from '../../events'
-import { renderMarkdown } from '../../markdown'
 import { getTabPlatform, setTabPlatform } from '../../settings'
 import type { Prompt } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
+// Reuse the Prompts tab styles: rows are visually identical, so we share the
+// stylesheet instead of duplicating it.
 import './PromptsTab.css'
 
-/** UI selection; "Both" fans out to one POST per real platform. */
+/** UI selection; "Both" shows iOS and Android ready prompts together. */
 type PlatformChoice = 'iOS' | 'Android' | 'Both'
 /** A platform that can actually be POSTed to the backend. */
 type TargetPlatform = 'iOS' | 'Android'
 
-/** Resolve a UI choice into the concrete platforms to POST to. */
+/** Resolve a UI choice into the concrete platforms to match against. */
 function resolveTargets(choice: PlatformChoice): TargetPlatform[] {
   return choice === 'Both' ? ['iOS', 'Android'] : [choice]
 }
 
 /**
- * "Prompts" tab: pick a platform (iOS / Android / Both), type a prompt, and
- * POST it on Enter. "Both" issues one POST per real platform and shows a
- * platform icon beside each prompt. Only platform and prompt are surfaced in
- * the UI; the remaining required fields are derived defaults (see submit()).
+ * "Ready" tab: a read-mostly view of prompts already marked state "ready"
+ * (published from the Prompts tab). Rows mirror the Prompts tab's: a
+ * platform icon in Both mode, the prompt text, and edit/copy/delete
+ * actions. Editing here upserts in place and keeps the prompt ready.
  */
-export default function PromptsTab() {
+export default function ReadyTab() {
   const { currentProject } = useCurrentProject()
   const [platform, setPlatformState] = useState<PlatformChoice>(
-    () => getTabPlatform('prompts'),
+    () => getTabPlatform('ready'),
   )
   // Persist the platform filter as a per-tab setting on change.
   const setPlatform = (p: PlatformChoice) => {
     setPlatformState(p)
-    setTabPlatform('prompts', p)
+    setTabPlatform('ready', p)
   }
-  const [prompt, setPrompt] = useState('')
+  const [prompts, setPrompts] = useState<Prompt[]>([])
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [prompts, setPrompts] = useState<Prompt[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
 
-  // One session per page load groups prompts created during this session;
-  // reloading the page starts a new session.
-  const [sessionId] = useState(() => crypto.randomUUID())
-
-  // Auto-grow the prompt textarea: shrink to content, then re-grow up to the
-  // CSS max-height (15 lines). The browser clamps via min/max-height.
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const autosize = useCallback(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [])
-
   const load = useCallback(async (projectId: string) => {
+    setLoading(true)
     setError(null)
     try {
       setPrompts(await fetchPrompts(projectId))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
     }
   }, [])
 
@@ -68,9 +58,7 @@ export default function PromptsTab() {
     else setPrompts([])
   }, [currentProject, load])
 
-  // Live-refresh: reload when any prompts file for this project changes
-  // (across clients/tabs/out-of-band). Prompts are fetched across all
-  // platforms, so a change to any platform file triggers one reload.
+  // Live-refresh: reload when any prompts file for this project changes.
   useEffect(() => {
     if (!currentProject) return
     return subscribe((e) => {
@@ -80,46 +68,16 @@ export default function PromptsTab() {
 
   const targets = useMemo(() => resolveTargets(platform), [platform])
 
-  // GET /prompts returns prompts across all platforms; filter client-side
-  // so toggling the platform radio doesn't refetch. This tab only shows
-  // drafts; "ready" prompts are considered published and hidden.
+  // Only ready prompts; cross-platform GET filtered client-side.
   const visible = useMemo(
     () =>
       prompts.filter(
         (p) =>
-          p.state === 'draft' &&
+          p.state === 'ready' &&
           targets.includes(p.platform as TargetPlatform),
       ),
     [prompts, targets],
   )
-
-  // Live, sanitized markdown preview of the prompt being typed.
-  const previewHtml = useMemo(() => renderMarkdown(prompt), [prompt])
-
-  const submit = async () => {
-    if (!currentProject) return
-    const value = prompt.trim()
-    if (!value || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      // Each target platform gets its own prompt_id (a separate record).
-      for (const target of resolveTargets(platform)) {
-        await createPrompt(currentProject, target, {
-          session_id: sessionId,
-          prompt_id: crypto.randomUUID(),
-          state: 'draft',
-          prompt: value,
-        })
-      }
-      setPrompt('')
-      await load(currentProject)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const startEdit = (p: Prompt) => {
     setEditingId(p.prompt_id)
@@ -141,11 +99,11 @@ export default function PromptsTab() {
     setBusy(true)
     setError(null)
     try {
-      // Upsert keyed on the existing prompt_id; platform/session preserved.
+      // Upsert keyed on the existing prompt_id; state stays 'ready'.
       await createPrompt(currentProject, p.platform, {
         session_id: p['session-id'],
         prompt_id: p.prompt_id,
-        state: p.state,
+        state: 'ready',
         prompt: value,
       })
       cancelEdit()
@@ -169,9 +127,17 @@ export default function PromptsTab() {
     }
   }
 
-  // Mark a draft prompt as "ready" (published). Upserts with state 'ready';
-  // once reloaded, the draft filter hides it from this list.
-  const handleReady = async (p: Prompt) => {
+  const handleCopy = async (p: Prompt) => {
+    try {
+      await navigator.clipboard.writeText(p.prompt)
+    } catch {
+      setError('Copy failed')
+    }
+  }
+
+  // Move a ready prompt back to "wip" (work-in-progress). Upserts with
+  // state 'wip'; once reloaded, the ready filter hides it from this list.
+  const handleToWip = async (p: Prompt) => {
     if (!currentProject) return
     setBusy(true)
     setError(null)
@@ -179,7 +145,7 @@ export default function PromptsTab() {
       await createPrompt(currentProject, p.platform, {
         session_id: p['session-id'],
         prompt_id: p.prompt_id,
-        state: 'ready',
+        state: 'wip',
         prompt: p.prompt,
       })
       await load(currentProject)
@@ -187,14 +153,6 @@ export default function PromptsTab() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
-    }
-  }
-
-  const handleCopy = async (p: Prompt) => {
-    try {
-      await navigator.clipboard.writeText(p.prompt)
-    } catch {
-      setError('Copy failed')
     }
   }
 
@@ -214,7 +172,7 @@ export default function PromptsTab() {
           <label key={p} className="prompts-platform-option">
             <input
               type="radio"
-              name="platform"
+              name="ready-platform"
               value={p}
               checked={platform === p}
               onChange={() => setPlatform(p)}
@@ -224,43 +182,10 @@ export default function PromptsTab() {
         ))}
       </fieldset>
 
-      <div className="prompts-editor">
-        <textarea
-          ref={textareaRef}
-          className="prompts-input prompts-input--editor"
-          placeholder="Enter a prompt…  (Cmd/Ctrl+Enter to submit)"
-          value={prompt}
-          autoFocus
-          rows={3}
-          disabled={busy}
-          onChange={(e) => setPrompt(e.target.value)}
-          onInput={autosize}
-          onFocus={autosize}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault()
-              void submit()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              setPrompt('')
-            }
-          }}
-        />
-        <div className="prompts-preview">
-          {previewHtml ? (
-            <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
-          ) : (
-            <span className="prompts-preview-placeholder">
-              Nothing to preview
-            </span>
-          )}
-        </div>
-      </div>
-
       {error && <p className="prompts-error">Error: {error}</p>}
-      {busy && <p className="prompts-empty">Saving…</p>}
-      {!busy && !error && visible.length === 0 && (
-        <p className="prompts-empty">No prompts yet.</p>
+      {loading && <p className="prompts-empty">Loading…</p>}
+      {!loading && !error && visible.length === 0 && (
+        <p className="prompts-empty">No ready prompts.</p>
       )}
 
       {visible.length > 0 && (
@@ -317,9 +242,9 @@ export default function PromptsTab() {
                   <span className="prompts-actions">
                     <button
                       className="icon-btn icon-btn--ready"
-                      title="Mark as ready"
+                      title="Move to Wip"
                       disabled={busy}
-                      onClick={() => void handleReady(p)}
+                      onClick={() => void handleToWip(p)}
                     >
                       <PlayIcon />
                     </button>
@@ -356,7 +281,7 @@ export default function PromptsTab() {
 }
 
 // ---- Platform icons (shown only in "Both" mode) ----
-// Android = green, Apple = blue, per the requested color coding.
+// Mirrors PromptsTab; duplicated to keep the tab self-contained.
 
 function AndroidIcon({ className }: { className?: string }) {
   return (
@@ -390,7 +315,7 @@ function AppleIcon({ className }: { className?: string }) {
   )
 }
 
-// ---- Row action icons (inline SVG, same shapes as Phrases/Future tabs) ----
+// ---- Row action icons (inline SVG, same shapes as Prompts tab) ----
 
 function PlayIcon() {
   return (

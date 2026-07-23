@@ -12,9 +12,11 @@ export function CurrentProjectProvider({ children }: { children: ReactNode }) {
     () => loadSettings().currentProject,
   )
 
-  // Persist on every change (not on first read — only when it actually changes).
+  // Persist on every change (not on first read — only when it actually
+  // changes). Merge into existing settings so other fields (e.g. the
+  // per-tab platform filters) are preserved.
   useEffect(() => {
-    saveSettings({ currentProject })
+    saveSettings({ ...loadSettings(), currentProject })
   }, [currentProject])
 
   const value = useMemo(

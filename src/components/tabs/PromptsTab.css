@@ -267,6 +267,16 @@
 /* Edit / copy / delete row-action icons sized to 16px.
    Scoped under .prompts-row for specificity so they beat the shared
    .icon-btn svg { 28px } rule above. */
+.prompts-row .icon-btn--ready svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* "Mark as ready" plays/publishes the draft; green reads as a go action. */
+.prompts-row .icon-btn--ready:hover {
+  color: #3ddc84;
+}
+
 .prompts-row .icon-btn--edit svg {
   width: 16px;
   height: 16px;

@@ -5,6 +5,11 @@ import type { Phrase } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
 import './PhrasesTab.css'
 
+/** Sort key for a phrase: lowercase, keeping only alphanumerics and spaces. */
+function sortKey(phrase: string): string {
+  return phrase.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '')
+}
+
 /** "Common phrases" tab: list + filter + CRUD for the selected project. */
 export default function PhrasesTab() {
   const { currentProject } = useCurrentProject()
@@ -59,9 +64,10 @@ export default function PhrasesTab() {
     const base = queryLower
       ? phrases.filter((p) => p.phrase.toLowerCase().includes(queryLower))
       : phrases
-    // Sort alphabetically, ignoring case (matches the filter's casing).
+    // Sort alphabetically, ignoring case and punctuation: the sort key keeps
+    // only alphanumerics and spaces.
     return [...base].sort((a, b) =>
-      a.phrase.toLowerCase().localeCompare(b.phrase.toLowerCase()),
+      sortKey(a.phrase).localeCompare(sortKey(b.phrase)),
     )
   }, [phrases, queryLower])
 
@@ -120,6 +126,17 @@ export default function PhrasesTab() {
       await navigator.clipboard.writeText(p.phrase)
     } catch {
       window.alert('Copy failed')
+    }
+  }
+
+  const handleDuplicate = async (p: Phrase) => {
+    if (!currentProject) return
+    try {
+      // Create a new phrase (server generates the id) with the same text.
+      await upsertPhrase(currentProject, p.phrase)
+      await load(currentProject)
+    } catch (e) {
+      window.alert(`Duplicate failed: ${e instanceof Error ? e.message : e}`)
     }
   }
 
@@ -183,14 +200,14 @@ export default function PhrasesTab() {
                   />
                   <span className="phrases-actions">
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--save"
                       title="Save"
                       onClick={() => void commitEdit(p.phrase_id)}
                     >
                       <SaveIcon />
                     </button>
                     <button
-                      className="icon-btn"
+                      className="icon-btn icon-btn--cancel"
                       title="Cancel"
                       onClick={cancelEdit}
                     >
@@ -202,6 +219,13 @@ export default function PhrasesTab() {
                 <>
                   <span className="phrases-text">{p.phrase}</span>
                   <span className="phrases-actions">
+                    <button
+                      className="icon-btn icon-btn--sm icon-btn--duplicate"
+                      title="Duplicate"
+                      onClick={() => void handleDuplicate(p)}
+                    >
+                      <DuplicateIcon />
+                    </button>
                     <button
                       className="icon-btn icon-btn--sm icon-btn--edit"
                       title="Edit"
@@ -235,6 +259,16 @@ export default function PhrasesTab() {
 }
 
 // ---- Icons (inline SVG keeps the app dependency-free) ----
+
+// Duplicate: two overlapping documents (distinct from CopyIcon's clipboard).
+function DuplicateIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M4 1.75A1.75 1.75 0 0 1 5.75 0h3.586a.75.75 0 0 1 .53.22l3.879 3.879a.75.75 0 0 1 .22.53V11.25A1.75 1.75 0 0 1 12.21 13H11v-1.5h1.21a.25.25 0 0 0 .25-.25V5.5h-2.5A1.75 1.75 0 0 1 8.21 3.75V1.5h-2.46a.25.25 0 0 0-.25.25V2H4v-.25Zm5.21-.382V3.75c0 .138.112.25.25.25h2.382L9.21 1.368Z" />
+      <path d="M1.75 4.5h5.5A1.75 1.75 0 0 1 9 6.25v7A1.75 1.75 0 0 1 7.25 15h-5.5A1.75 1.75 0 0 1 0 13.25v-7A1.75 1.75 0 0 1 1.75 4.5ZM1.5 6.25v7c0 .138.112.25.25.25h5.5a.25.25 0 0 0 .25-.25v-7a.25.25 0 0 0-.25-.25h-5.5a.25.25 0 0 0-.25.25Z" />
+    </svg>
+  )
+}
 
 function EditIcon() {
   return (

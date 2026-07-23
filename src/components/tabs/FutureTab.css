@@ -19,6 +19,13 @@
   font-size: 13px;
 }
 
+/* Dark green outline on the toolbar filter box (scoped so the inline
+   edit input, which also uses .future-input, is unaffected). */
+.future-toolbar .future-input {
+  outline: 2px solid #2da44e;
+  outline-offset: -1px;
+}
+
 .future-input::placeholder {
   color: var(--text-muted);
 }
@@ -173,6 +180,18 @@
 
 /* Copy icon sized to 16px. */
 .future-row .icon-btn--copy svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Save icon (edit-mode) sized to 16px. */
+.future-row .icon-btn--save svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Cancel icon (edit-mode) sized to 16px. */
+.future-row .icon-btn--cancel svg {
   width: 16px;
   height: 16px;
 }
