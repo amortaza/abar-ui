@@ -131,13 +131,19 @@ export default function PromptsTab() {
   // GET /prompts returns prompts across all platforms; filter client-side
   // so toggling the platform radio doesn't refetch. This tab only shows
   // drafts; "ready" prompts are considered published and hidden.
+  //
+  // The backend appends new prompts to the end of the file, so the array
+  // is oldest-first. Reverse it so the list behaves like a stack: the most
+  // recently submitted prompt sits at the top.
   const visible = useMemo(
     () =>
-      prompts.filter(
-        (p) =>
-          p.state === 'draft' &&
-          targets.includes(p.platform as TargetPlatform),
-      ),
+      prompts
+        .filter(
+          (p) =>
+            p.state === 'draft' &&
+            targets.includes(p.platform as TargetPlatform),
+        )
+        .reverse(),
     [prompts, targets],
   )
 
@@ -498,7 +504,7 @@ export default function PromptsTab() {
       {error && <p className="prompts-error">Error: {error}</p>}
       {busy && <p className="prompts-empty">Saving…</p>}
       {!busy && !error && visible.length === 0 && (
-        <p className="prompts-empty">No prompts yet.</p>
+        <p className="prompts-empty">No backlog items yet.</p>
       )}
 
       {visible.length > 0 && (
