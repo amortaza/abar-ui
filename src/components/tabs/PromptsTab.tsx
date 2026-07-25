@@ -71,6 +71,14 @@ export default function PromptsTab() {
   // reloading the page starts a new session.
   const [sessionId] = useState(() => crypto.randomUUID())
 
+  // Monotonic counter stamped onto each prompt at submit time, recording the
+  // order in which prompts were submitted from this tab (most recent = highest).
+  // Used to order the backlog as a stack: the latest submission sits on top,
+  // regardless of which platform each prompt was filed under. A ref (not state)
+  // because it's a lookup table read inside the visible memo's sort, not UI.
+  const submitSeqRef = useRef(0)
+  const submitOrderRef = useRef<Map<string, number>>(new Map())
+
   // Auto-grow a textarea: shrink to content, then re-grow up to the CSS
   // max-height. The browser clamps via min/max-height.
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -132,20 +140,23 @@ export default function PromptsTab() {
   // so toggling the platform radio doesn't refetch. This tab only shows
   // drafts; "ready" prompts are considered published and hidden.
   //
-  // The backend appends new prompts to the end of the file, so the array
-  // is oldest-first. Reverse it so the list behaves like a stack: the most
-  // recently submitted prompt sits at the top.
-  const visible = useMemo(
-    () =>
-      prompts
-        .filter(
-          (p) =>
-            p.state === 'draft' &&
-            targets.includes(p.platform as TargetPlatform),
-        )
-        .reverse(),
-    [prompts, targets],
-  )
+  // Order the backlog as a stack: prompts submitted from this tab (recorded
+  // in submitOrderRef) come first, most recent on top, ignoring which
+  // platform each was filed under — so a "Both" submit's iOS + Android
+  // prompts land as a unit above everything else. Prompts without a recorded
+  // submission order (pre-existing, created out-of-band, or before this page
+  // load) keep their original array order, below this session's submissions.
+  const visible = useMemo(() => {
+    const order = submitOrderRef.current
+    const filtered = prompts.filter(
+      (p) =>
+        p.state === 'draft' && targets.includes(p.platform as TargetPlatform),
+    )
+    return filtered
+      .map((p, i) => ({ p, seq: order.get(p.prompt_id) ?? -1, i }))
+      .sort((a, b) => (a.seq !== b.seq ? b.seq - a.seq : a.i - b.i))
+      .map((e) => e.p)
+  }, [prompts, targets])
 
   // Live, sanitized markdown preview of the prompt being typed.
   const previewHtml = useMemo(() => renderMarkdown(prompt), [prompt])
@@ -247,11 +258,16 @@ export default function PromptsTab() {
     setBusy(true)
     setError(null)
     try {
-      // Each target platform gets its own prompt_id (a separate record).
+      // Each target platform gets its own prompt_id (a separate record). All
+      // prompts from this one submit() call share the same sequence number so
+      // they group together on top of the backlog, ignoring platform.
+      const seq = ++submitSeqRef.current
       for (const target of resolveTargets(platform)) {
+        const promptId = crypto.randomUUID()
+        submitOrderRef.current.set(promptId, seq)
         await createPrompt(currentProject, target, {
           session_id: sessionId,
-          prompt_id: crypto.randomUUID(),
+          prompt_id: promptId,
           state: 'draft',
           prompt: value,
         })
