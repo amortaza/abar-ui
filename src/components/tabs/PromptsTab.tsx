@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPrompt, deletePrompt, fetchPrompts } from '../../api'
+import { createPrompt, deletePrompt, fetchPhrases, fetchPrompts } from '../../api'
 import { subscribe } from '../../events'
 import { renderMarkdown } from '../../markdown'
 import { getTabPlatform, setTabPlatform } from '../../settings'
-import type { Prompt } from '../../types'
+import type { Phrase, Prompt } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
 import './PromptsTab.css'
 
@@ -11,6 +11,22 @@ import './PromptsTab.css'
 type PlatformChoice = 'iOS' | 'Android' | 'Both'
 /** A platform that can actually be POSTed to the backend. */
 type TargetPlatform = 'iOS' | 'Android'
+
+/** Active "/-mention" range: where the trigger '/' sits and what follows. */
+interface Mention {
+  /** Index of the '/' that opened the mention. */
+  start: number
+  /** Text typed after the '/', up to the caret. */
+  query: string
+}
+
+/**
+ * Lowercases and strips everything but alphanumerics + spaces, for
+ * case- and punctuation-insensitive matching of "/"-mention queries.
+ */
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '')
+}
 
 /** Resolve a UI choice into the concrete platforms to POST to. */
 function resolveTargets(choice: PlatformChoice): TargetPlatform[] {
@@ -39,6 +55,16 @@ export default function PromptsTab() {
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+
+  // Project's common phrases, used to populate the "/"-mention picker in the
+  // prompt box. Loaded alongside prompts and live-refreshed the same way.
+  const [phrases, setPhrases] = useState<Phrase[]>([])
+
+  // Active "/-mention" range (or null when dismissed). suppressRef is set
+  // after Esc dismisses a mention; it blocks re-opening until a fresh '/'
+  // is typed, so the user can type '/' literally without the panel popping.
+  const [mention, setMention] = useState<Mention | null>(null)
+  const suppressRef = useRef(false)
 
   // One session per page load groups prompts created during this session;
   // reloading the page starts a new session.
@@ -78,6 +104,27 @@ export default function PromptsTab() {
     })
   }, [currentProject, load])
 
+  // Load + live-refresh the common phrases that back the "/"-mention picker.
+  const loadPhrases = useCallback(async (projectId: string) => {
+    try {
+      setPhrases(await fetchPhrases(projectId))
+    } catch {
+      setPhrases([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (currentProject) void loadPhrases(currentProject)
+    else setPhrases([])
+  }, [currentProject, loadPhrases])
+
+  useEffect(() => {
+    if (!currentProject) return
+    return subscribe((e) => {
+      if (e.type === 'phrases' && e.project_id === currentProject) void loadPhrases(currentProject)
+    })
+  }, [currentProject, loadPhrases])
+
   const targets = useMemo(() => resolveTargets(platform), [platform])
 
   // GET /prompts returns prompts across all platforms; filter client-side
@@ -96,6 +143,78 @@ export default function PromptsTab() {
   // Live, sanitized markdown preview of the prompt being typed.
   const previewHtml = useMemo(() => renderMarkdown(prompt), [prompt])
 
+  /**
+   * Scan the textarea contents around the caret for an open "/-mention".
+   * Finds the last '/' at or before the caret; it only counts if it sits at
+   * the start of the text or right after whitespace (so '/' inside URLs or
+   * file paths like "a/b" doesn't fire), and nothing has broken the run since
+   * (no spaces/newlines between it and the caret). Returns null when there's
+   * no active mention, or when the user dismissed it with Esc and hasn't typed
+   * a fresh '/' since.
+   */
+  const evaluate = useCallback((value: string, caret: number): Mention | null => {
+    if (suppressRef.current) return null
+    // Walk back from the caret to the last '/' that opens this run. The '/' is
+    // only a trigger at the start of text or after whitespace (so '/' inside
+    // "a/b" or URLs doesn't fire). Crossing whitespace ends the search.
+    let i = caret
+    while (i > 0) {
+      i--
+      const ch = value[i]
+      if (ch === '/') {
+        const ok = i === 0 || /\s/.test(value[i - 1])
+        return ok ? { start: i, query: value.slice(i + 1, caret) } : null
+      }
+      if (/\s/.test(ch)) return null
+    }
+    return null
+  }, [])
+
+  // Phrases matching the current "/-mention" query, case- and punctuation-
+  // insensitive. Capped for the dropdown; empty means the panel is hidden.
+  const mentionMatches = useMemo<Phrase[]>(() => {
+    if (!mention) return []
+    const q = normalize(mention.query)
+    return phrases
+      .filter((p) => normalize(p.phrase).includes(q))
+      .slice(0, 8)
+  }, [mention, phrases])
+
+  /**
+   * Insert a chosen phrase at the active mention, replacing the "/" + query
+   * region, then dismiss the panel and refocus the caret just past the text.
+   * `requestAnimationFrame` lets React commit the new value before we set
+   * selection, otherwise the caret lands at the end.
+   */
+  const selectMention = useCallback(
+    (phrase: Phrase) => {
+      const el = textareaRef.current
+      if (!el || !mention) return
+      const before = prompt.slice(0, mention.start)
+      const after = prompt.slice(el.selectionStart)
+      const next = before + phrase.phrase + after
+      const caret = before.length + phrase.phrase.length
+      setMention(null)
+      setPrompt(next)
+      requestAnimationFrame(() => {
+        const t = textareaRef.current
+        if (!t) return
+        t.focus()
+        t.setSelectionRange(caret, caret)
+        autosize()
+      })
+    },
+    [mention, prompt, autosize],
+  )
+
+  // Close the panel via Esc: set the suppress flag so it won't reappear until
+  // the user types a fresh '/', then refocus the textarea so typing continues.
+  const dismissMention = useCallback(() => {
+    suppressRef.current = true
+    setMention(null)
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }, [])
+
   const submit = async () => {
     if (!currentProject) return
     const value = prompt.trim()
@@ -113,6 +232,8 @@ export default function PromptsTab() {
         })
       }
       setPrompt('')
+      setMention(null)
+      suppressRef.current = false
       await load(currentProject)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -225,27 +346,71 @@ export default function PromptsTab() {
       </fieldset>
 
       <div className="prompts-editor">
-        <textarea
-          ref={textareaRef}
-          className="prompts-input prompts-input--editor"
-          placeholder="Enter a prompt…  (Cmd/Ctrl+Enter to submit)"
-          value={prompt}
-          autoFocus
-          rows={3}
-          disabled={busy}
-          onChange={(e) => setPrompt(e.target.value)}
-          onInput={autosize}
-          onFocus={autosize}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault()
-              void submit()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              setPrompt('')
-            }
-          }}
-        />
+        <div className="prompts-input-wrap">
+          <textarea
+            ref={textareaRef}
+            className="prompts-input prompts-input--editor"
+            placeholder="Enter a prompt…  (Cmd/Ctrl+Enter to submit, / for phrases)"
+            value={prompt}
+            autoFocus
+            rows={3}
+            disabled={busy}
+            onChange={(e) => {
+              const v = e.target.value
+              setPrompt(v)
+              const caret = e.target.selectionStart ?? v.length
+              setMention(evaluate(v, caret))
+            }}
+            onInput={autosize}
+            onFocus={autosize}
+            onKeyUp={(e) => {
+              // Arrow keys move the caret without an onChange; re-evaluate so
+              // the picker tracks (or clears as) the caret enters/leaves a run.
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+                const el = e.currentTarget
+                setMention(evaluate(el.value, el.selectionStart ?? el.value.length))
+              }
+            }}
+            onClick={(e) => {
+              const el = e.currentTarget
+              setMention(evaluate(el.value, el.selectionStart ?? el.value.length))
+            }}
+            onKeyDown={(e) => {
+              // A freshly typed '/' re-enables the picker after an Esc dismiss.
+              if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                suppressRef.current = false
+              } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                void submit()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                if (mention) dismissMention()
+                else setPrompt('')
+              }
+            }}
+          />
+          {mention && mentionMatches.length > 0 && (
+            <div className="prompts-mention" role="listbox" aria-label="Common phrases">
+              {mentionMatches.map((p) => (
+                <button
+                  key={p.phrase_id}
+                  type="button"
+                  className="prompts-mention-item"
+                  role="option"
+                  aria-selected={false}
+                  // mouseDown (not click) fires before the textarea loses focus,
+                  // so the caret position we read in selectMention() is intact.
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    selectMention(p)
+                  }}
+                >
+                  {p.phrase}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="prompts-preview">
           {previewHtml ? (
             <div dangerouslySetInnerHTML={{ __html: previewHtml }} />

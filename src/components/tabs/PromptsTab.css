@@ -65,6 +65,58 @@
   min-width: 0;
 }
 
+/* Wraps the prompt textarea so the "/-mention" picker can anchor to it.
+   Replaces the bare textarea as the flex child of .prompts-editor. */
+.prompts-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.prompts-input-wrap > .prompts-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* "/-mention" phrase picker: anchored just under the textarea, above the
+   markdown preview. */
+.prompts-mention {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  margin-top: 2px;
+  min-width: 160px;
+  max-width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+}
+
+.prompts-mention-item {
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.prompts-mention-item:hover {
+  background: var(--surface-2);
+}
+
 .prompts-editor > .prompts-preview {
   flex: 1;
   min-width: 0;
