@@ -6,6 +6,13 @@
 
 const STORAGE_KEY = 'abar.settings.v1'
 
+/**
+ * Window event name dispatched whenever a setting changes, so other parts of
+ * the UI (e.g. the RightPane's row counts) can react to per-tab platform
+ * picks that happen inside individual tab components.
+ */
+export const SETTINGS_EVENT = 'abar:settings'
+
 /** The platform filter chosen in a right-pane tab. */
 export type TabPlatform = 'iOS' | 'Android' | 'Both'
 
@@ -75,4 +82,7 @@ export function setTabPlatform(tabId: string, platform: TabPlatform): void {
   const settings = loadSettings()
   settings.platforms[tabId] = platform
   saveSettings(settings)
+  // Notify listeners that a platform filter changed (e.g. so the RightPane can
+  // update row counts that now respect the per-tab platform pick).
+  window.dispatchEvent(new Event(SETTINGS_EVENT))
 }
