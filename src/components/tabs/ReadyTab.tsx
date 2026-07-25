@@ -135,9 +135,9 @@ export default function ReadyTab() {
     }
   }
 
-  // Move a ready prompt back to "wip" (work-in-progress). Upserts with
-  // state 'wip'; once reloaded, the ready filter hides it from this list.
-  const handleToWip = async (p: Prompt) => {
+  // Move a ready prompt forward to "review". Upserts with state 'review';
+  // once reloaded, the ready filter hides it from this list.
+  const handleToReview = async (p: Prompt) => {
     if (!currentProject) return
     setBusy(true)
     setError(null)
@@ -145,7 +145,7 @@ export default function ReadyTab() {
       await createPrompt(currentProject, p.platform, {
         session_id: p['session-id'],
         prompt_id: p.prompt_id,
-        state: 'wip',
+        state: 'review',
         prompt: p.prompt,
       })
       await load(currentProject)
@@ -157,10 +157,10 @@ export default function ReadyTab() {
   }
 
   // "Play" is the row's primary left action: copy the prompt to the
-  // clipboard and move it back to Wip in one go.
+  // clipboard and move it forward to Review in one go.
   const handlePlay = (p: Prompt) => {
     void handleCopy(p)
-    void handleToWip(p)
+    void handleToReview(p)
   }
 
   if (!currentProject) {
@@ -201,7 +201,7 @@ export default function ReadyTab() {
             <li key={p.prompt_id} className="prompts-row">
               <button
                 className="icon-btn icon-btn--ready prompts-row-play"
-                title="Copy & move to Wip"
+                title="Copy & move to Review"
                 disabled={busy}
                 onClick={() => handlePlay(p)}
               >
