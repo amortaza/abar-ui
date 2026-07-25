@@ -1,9 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { deleteFuture, fetchFutures, reorderFutures, upsertFuture } from '../../api'
+import { deleteFuture, fetchFutures, fetchPhrases, reorderFutures, upsertFuture } from '../../api'
 import { subscribe } from '../../events'
-import type { Future } from '../../types'
+import type { Future, Phrase } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
 import './FutureTab.css'
+
+/** Active "/-mention" range: where the trigger '/' sits and what follows. */
+interface Mention {
+  /** Index of the '/' that opened the mention. */
+  start: number
+  /** Text typed after the '/', up to the caret. */
+  query: string
+}
+
+/**
+ * Lowercases and strips everything but alphanumerics + spaces, for
+ * case- and punctuation-insensitive matching of "/"-mention queries.
+ */
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '')
+}
 
 /** "Future" tab: list + filter + CRUD for the selected project. */
 export default function FutureTab() {
@@ -19,6 +35,16 @@ export default function FutureTab() {
   const [draft, setDraft] = useState('')
   const editRef = useRef<HTMLTextAreaElement>(null)
   const filterRef = useRef<HTMLTextAreaElement>(null)
+
+  // Project's common phrases, used to populate the "/"-mention picker in the
+  // filter box. Loaded alongside futures and live-refreshed the same way.
+  const [phrases, setPhrases] = useState<Phrase[]>([])
+
+  // Active "/-mention" range (or null when dismissed). suppressRef is set
+  // after Esc dismisses a mention; it blocks re-opening until a fresh '/'
+  // is typed, so the user can type '/' literally without the panel popping.
+  const [mention, setMention] = useState<Mention | null>(null)
+  const suppressRef = useRef(false)
 
   // Auto-grow a textarea: shrink to content, then re-grow up to the CSS
   // max-height (11 lines). The browser clamps via min/max-height.
@@ -70,6 +96,27 @@ export default function FutureTab() {
     })
   }, [currentProject, load])
 
+  // Load + live-refresh the common phrases that back the "/"-mention picker.
+  const loadPhrases = useCallback(async (projectId: string) => {
+    try {
+      setPhrases(await fetchPhrases(projectId))
+    } catch {
+      setPhrases([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (currentProject) void loadPhrases(currentProject)
+    else setPhrases([])
+  }, [currentProject, loadPhrases])
+
+  useEffect(() => {
+    if (!currentProject) return
+    return subscribe((e) => {
+      if (e.type === 'phrases' && e.project_id === currentProject) void loadPhrases(currentProject)
+    })
+  }, [currentProject, loadPhrases])
+
   const queryLower = query.trim().toLowerCase()
   const filtered = useMemo(
     () =>
@@ -79,6 +126,75 @@ export default function FutureTab() {
     [futures, queryLower],
   )
 
+  /**
+   * Scan the filter box contents around the caret for an open "/-mention".
+   * Walks back to the last '/' at or before the caret; it only counts if it
+   * sits at the start of text or right after whitespace (so '/' inside "a/b"
+   * or URLs doesn't fire), and nothing has broken the run since (no
+   * spaces/newlines between it and the caret). Returns null when there's no
+   * active mention, or when the user dismissed it with Esc and hasn't typed a
+   * fresh '/' since.
+   */
+  const evaluate = useCallback((value: string, caret: number): Mention | null => {
+    if (suppressRef.current) return null
+    let i = caret
+    while (i > 0) {
+      i--
+      const ch = value[i]
+      if (ch === '/') {
+        const ok = i === 0 || /\s/.test(value[i - 1])
+        return ok ? { start: i, query: value.slice(i + 1, caret) } : null
+      }
+      if (/\s/.test(ch)) return null
+    }
+    return null
+  }, [])
+
+  // Phrases matching the current "/-mention" query, case- and punctuation-
+  // insensitive. Capped for the dropdown; empty means the panel is hidden.
+  const mentionMatches = useMemo<Phrase[]>(() => {
+    if (!mention) return []
+    const q = normalize(mention.query)
+    return phrases
+      .filter((p) => normalize(p.phrase).includes(q))
+      .slice(0, 8)
+  }, [mention, phrases])
+
+  /**
+   * Insert a chosen phrase at the active mention, replacing the "/" + query
+   * region, then dismiss the panel and refocus the caret just past the text.
+   * `requestAnimationFrame` lets React commit the new value before we set
+   * selection, otherwise the caret lands at the end.
+   */
+  const selectMention = useCallback(
+    (phrase: Phrase) => {
+      const el = filterRef.current
+      if (!el || !mention) return
+      const before = query.slice(0, mention.start)
+      const after = query.slice(el.selectionStart)
+      const next = before + phrase.phrase + after
+      const caret = before.length + phrase.phrase.length
+      setMention(null)
+      setQuery(next)
+      requestAnimationFrame(() => {
+        const t = filterRef.current
+        if (!t) return
+        t.focus()
+        t.setSelectionRange(caret, caret)
+        autosize(t)
+      })
+    },
+    [mention, query, autosize],
+  )
+
+  // Close the panel via Esc: set the suppress flag so it won't reappear until
+  // the user types a fresh '/', then refocus the filter box so typing continues.
+  const dismissMention = useCallback(() => {
+    suppressRef.current = true
+    setMention(null)
+    requestAnimationFrame(() => filterRef.current?.focus())
+  }, [])
+
   const handleAdd = async () => {
     if (!currentProject) return
     const value = query.trim()
@@ -86,6 +202,8 @@ export default function FutureTab() {
     try {
       await upsertFuture(currentProject, value)
       setQuery('')
+      setMention(null)
+      suppressRef.current = false
       await load(currentProject)
       // Also copy the new future to the clipboard.
       try {
@@ -182,27 +300,68 @@ export default function FutureTab() {
   return (
     <section className="future-tab">
       <div className="future-toolbar">
-        <textarea
-          ref={filterRef}
-          className="future-input future-input--filter"
-          placeholder="Filter…  (Ctrl+Enter adds a new future)"
-          rows={3}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            autosize(filterRef.current)
-          }}
-          onInput={() => autosize(filterRef.current)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault()
-              void handleAdd()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              setQuery('')
-            }
-          }}
-        />
+        <div className="future-input-wrap">
+          <textarea
+            ref={filterRef}
+            className="future-input future-input--filter"
+            placeholder="Filter…  (Ctrl+Enter adds a new future, / for phrases)"
+            rows={3}
+            value={query}
+            onChange={(e) => {
+              const v = e.target.value
+              setQuery(v)
+              autosize(filterRef.current)
+              const caret = e.target.selectionStart ?? v.length
+              setMention(evaluate(v, caret))
+            }}
+            onKeyUp={(e) => {
+              // Arrow/Home/End keys move the caret without an onChange;
+              // re-evaluate so the picker tracks the caret.
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+                const el = e.currentTarget
+                setMention(evaluate(el.value, el.selectionStart ?? el.value.length))
+              }
+            }}
+            onClick={(e) => {
+              const el = e.currentTarget
+              setMention(evaluate(el.value, el.selectionStart ?? el.value.length))
+            }}
+            onKeyDown={(e) => {
+              // A freshly typed '/' re-enables the picker after an Esc dismiss.
+              if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                suppressRef.current = false
+              } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                void handleAdd()
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                if (mention) dismissMention()
+                else setQuery('')
+              }
+            }}
+          />
+          {mention && mentionMatches.length > 0 && (
+            <div className="future-mention" role="listbox" aria-label="Common phrases">
+              {mentionMatches.map((p) => (
+                <button
+                  key={p.phrase_id}
+                  type="button"
+                  className="future-mention-item"
+                  role="option"
+                  aria-selected={false}
+                  // mouseDown (not click) fires before the textarea loses
+                  // focus, so the caret we read in selectMention() is intact.
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    selectMention(p)
+                  }}
+                >
+                  {p.phrase}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {loading && <p className="future-empty">Loading…</p>}
