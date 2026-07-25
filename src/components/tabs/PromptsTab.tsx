@@ -71,11 +71,11 @@ export default function PromptsTab() {
   // reloading the page starts a new session.
   const [sessionId] = useState(() => crypto.randomUUID())
 
-  // Auto-grow the prompt textarea: shrink to content, then re-grow up to the
-  // CSS max-height (15 lines). The browser clamps via min/max-height.
+  // Auto-grow a textarea: shrink to content, then re-grow up to the CSS
+  // max-height. The browser clamps via min/max-height.
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const autosize = useCallback(() => {
-    const el = textareaRef.current
+  const editRef = useRef<HTMLTextAreaElement>(null)
+  const autosize = useCallback((el: HTMLTextAreaElement | null) => {
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
@@ -219,7 +219,7 @@ export default function PromptsTab() {
         if (!t) return
         t.focus()
         t.setSelectionRange(caret, caret)
-        autosize()
+        autosize(t)
       })
     },
     [mention, prompt, autosize],
@@ -370,7 +370,7 @@ export default function PromptsTab() {
           <textarea
             ref={textareaRef}
             className="prompts-input prompts-input--editor"
-            placeholder="Enter a prompt…  (Cmd/Ctrl+Enter to submit, / for phrases)"
+            placeholder="Enter a prompt…  (Enter to submit, / for phrases)"
             value={prompt}
             autoFocus
             rows={3}
@@ -381,8 +381,8 @@ export default function PromptsTab() {
               const caret = e.target.selectionStart ?? v.length
               setMention(evaluate(v, caret))
             }}
-            onInput={autosize}
-            onFocus={autosize}
+            onInput={() => autosize(textareaRef.current)}
+            onFocus={() => autosize(textareaRef.current)}
             onKeyUp={(e) => {
               // Arrow keys move the caret without an onChange; re-evaluate so
               // the picker tracks (or clears as) the caret enters/leaves a run.
@@ -417,7 +417,7 @@ export default function PromptsTab() {
                   if (!t) return
                   t.focus()
                   t.setSelectionRange(caret, caret)
-                  autosize()
+                  autosize(t)
                 })
                 return
               }
@@ -430,10 +430,16 @@ export default function PromptsTab() {
                   return
                 }
               }
-              // Submit the prompt.
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              // Plain Enter submits; Ctrl/Cmd+Enter inserts a newline.
+              if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey) {
                 e.preventDefault()
                 void submit()
+                return
+              }
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                document.execCommand('insertText', false, '\n')
+                autosize(textareaRef.current)
                 return
               }
               // Tab navigates the panel: select the sole option, or cycle.
@@ -499,6 +505,14 @@ export default function PromptsTab() {
         <ul className="prompts-list">
           {visible.map((p) => (
             <li key={p.prompt_id} className="prompts-row">
+              <button
+                className="icon-btn icon-btn--ready prompts-row-play"
+                title="Mark as ready"
+                disabled={busy}
+                onClick={() => void handleReady(p)}
+              >
+                <PlayIcon />
+              </button>
               <span className="prompts-platform-icon">
                 {p.platform === 'Android' ? (
                   <AndroidIcon className="icon-android" />
@@ -508,14 +522,24 @@ export default function PromptsTab() {
               </span>
               {editingId === p.prompt_id ? (
                 <>
-                  <input
-                    className="prompts-input prompts-input--inline"
+                  <textarea
+                    ref={editRef}
+                    className="prompts-input prompts-input--inline prompts-input--editor"
                     autoFocus
+                    rows={3}
                     disabled={busy}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
+                    onInput={() => autosize(editRef.current)}
+                    onFocus={() => autosize(editRef.current)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      // Plain Enter commits the edit; Ctrl/Cmd+Enter inserts a
+                      // newline (reversed from the usual textarea convention).
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault()
+                        document.execCommand('insertText', false, '\n')
+                        autosize(editRef.current)
+                      } else if (e.key === 'Enter' && !e.altKey) {
                         e.preventDefault()
                         void commitEdit(p)
                       } else if (e.key === 'Escape') {
@@ -547,14 +571,6 @@ export default function PromptsTab() {
                 <>
                   <span className="prompts-text">{p.prompt}</span>
                   <span className="prompts-actions">
-                    <button
-                      className="icon-btn icon-btn--ready"
-                      title="Mark as ready"
-                      disabled={busy}
-                      onClick={() => void handleReady(p)}
-                    >
-                      <PlayIcon />
-                    </button>
                     <button
                       className="icon-btn icon-btn--edit"
                       title="Edit"

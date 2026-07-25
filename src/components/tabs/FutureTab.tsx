@@ -381,10 +381,16 @@ export default function FutureTab() {
                   return
                 }
               }
-              // Add a new future.
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              // Plain Enter adds a new future; Ctrl/Cmd+Enter inserts a newline.
+              if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey) {
                 e.preventDefault()
                 void handleAdd()
+                return
+              }
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                document.execCommand('insertText', false, '\n')
+                autosize(filterRef.current)
                 return
               }
               // Tab navigates the panel: select the sole option, or cycle.
@@ -477,7 +483,13 @@ export default function FutureTab() {
                     onInput={() => autosize(editRef.current)}
                     onFocus={() => autosize(editRef.current)}
                     onKeyDown={(e) => {
+                      // Plain Enter commits the edit; Ctrl/Cmd+Enter inserts a
+                      // newline (reversed from the usual textarea convention).
                       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault()
+                        document.execCommand('insertText', false, '\n')
+                        autosize(editRef.current)
+                      } else if (e.key === 'Enter' && !e.altKey) {
                         e.preventDefault()
                         void commitEdit(f.future_id)
                       } else if (e.key === 'Escape') {

@@ -156,6 +156,13 @@ export default function ReadyTab() {
     }
   }
 
+  // "Play" is the row's primary left action: copy the prompt to the
+  // clipboard and move it back to Wip in one go.
+  const handlePlay = (p: Prompt) => {
+    void handleCopy(p)
+    void handleToWip(p)
+  }
+
   if (!currentProject) {
     return (
       <section className="prompts-tab">
@@ -192,6 +199,14 @@ export default function ReadyTab() {
         <ul className="prompts-list">
           {visible.map((p) => (
             <li key={p.prompt_id} className="prompts-row">
+              <button
+                className="icon-btn icon-btn--ready prompts-row-play"
+                title="Copy & move to Wip"
+                disabled={busy}
+                onClick={() => handlePlay(p)}
+              >
+                <PlayIcon />
+              </button>
               <span className="prompts-platform-icon">
                 {p.platform === 'Android' ? (
                   <AndroidIcon className="icon-android" />
@@ -240,14 +255,6 @@ export default function ReadyTab() {
                 <>
                   <span className="prompts-text">{p.prompt}</span>
                   <span className="prompts-actions">
-                    <button
-                      className="icon-btn icon-btn--ready"
-                      title="Move to Wip"
-                      disabled={busy}
-                      onClick={() => void handleToWip(p)}
-                    >
-                      <PlayIcon />
-                    </button>
                     <button
                       className="icon-btn icon-btn--edit"
                       title="Edit"

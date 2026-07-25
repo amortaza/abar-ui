@@ -191,6 +191,14 @@ export default function WipTab() {
         <ul className="prompts-list">
           {visible.map((p) => (
             <li key={p.prompt_id} className="prompts-row">
+              <button
+                className="icon-btn icon-btn--ready prompts-row-play"
+                title="Move to Review"
+                disabled={busy}
+                onClick={() => void handleToReview(p)}
+              >
+                <PlayIcon />
+              </button>
               <span className="prompts-platform-icon">
                 {p.platform === 'Android' ? (
                   <AndroidIcon className="icon-android" />
@@ -239,14 +247,6 @@ export default function WipTab() {
                 <>
                   <span className="prompts-text">{p.prompt}</span>
                   <span className="prompts-actions">
-                    <button
-                      className="icon-btn icon-btn--ready"
-                      title="Move to Review"
-                      disabled={busy}
-                      onClick={() => void handleToReview(p)}
-                    >
-                      <PlayIcon />
-                    </button>
                     <button
                       className="icon-btn icon-btn--edit"
                       title="Edit"
