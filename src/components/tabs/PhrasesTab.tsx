@@ -79,6 +79,12 @@ export default function PhrasesTab() {
       await upsertPhrase(currentProject, value)
       setQuery('')
       await load(currentProject)
+      // Also copy the new phrase to the clipboard.
+      try {
+        await navigator.clipboard.writeText(value)
+      } catch {
+        /* clipboard is best-effort; the add itself succeeded */
+      }
     } catch (e) {
       window.alert(`Add failed: ${e instanceof Error ? e.message : e}`)
     }

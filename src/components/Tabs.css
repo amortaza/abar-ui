@@ -34,6 +34,17 @@
   border-bottom-color: var(--accent);
 }
 
+/* Disabled tabs are dimmed and ignore pointer interactions. */
+.tab--disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tab--disabled:hover {
+  color: var(--text-muted);
+}
+
 .tab-body {
   flex: 1;
   min-height: 0;

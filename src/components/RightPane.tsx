@@ -51,12 +51,17 @@ export default function RightPane() {
     }
   }, [prompts])
 
+  // All tabs are scoped to the current project, so they're disabled until one
+  // is selected. (The shared Tabs component falls back to the first enabled tab
+  // — none here — and renders no body.)
+  const noProject = currentProject === null
+
   const tabs: TabDef[] = [
-    { id: 'prompts', label: `Prompts (${counts.draft})`, content: <PromptsTab /> },
-    { id: 'ready', label: `Ready (${counts.ready})`, content: <ReadyTab /> },
-    { id: 'wip', label: `Wip (${counts.wip})`, content: <WipTab /> },
-    { id: 'review', label: `Review (${counts.review})`, content: <ReviewTab /> },
-    { id: 'done', label: `Done (${counts.done})`, content: <DoneTab /> },
+    { id: 'prompts', label: `Prompts (${counts.draft})`, content: <PromptsTab />, disabled: noProject },
+    { id: 'ready', label: `Ready (${counts.ready})`, content: <ReadyTab />, disabled: noProject },
+    { id: 'wip', label: `Wip (${counts.wip})`, content: <WipTab />, disabled: noProject },
+    { id: 'review', label: `Review (${counts.review})`, content: <ReviewTab />, disabled: noProject },
+    { id: 'done', label: `Done (${counts.done})`, content: <DoneTab />, disabled: noProject },
   ]
 
   return (

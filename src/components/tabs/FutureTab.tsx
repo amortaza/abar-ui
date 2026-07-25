@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { deleteFuture, fetchFutures, reorderFutures, upsertFuture } from '../../api'
 import { subscribe } from '../../events'
 import type { Future } from '../../types'
@@ -17,6 +17,22 @@ export default function FutureTab() {
   const [query, setQuery] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const editRef = useRef<HTMLTextAreaElement>(null)
+  const filterRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-grow a textarea: shrink to content, then re-grow up to the CSS
+  // max-height (11 lines). The browser clamps via min/max-height.
+  const autosize = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [])
+
+  // Re-measure the filter box when query changes out of band (e.g. cleared
+  // after adding a phrase or pressing Escape).
+  useEffect(() => {
+    autosize(filterRef.current)
+  }, [query, autosize])
 
   // Drag-and-drop reordering. Dragging only initiates from the grip handle
   // (armedId gates the row's draggable attribute) so clicks on the text and
@@ -71,6 +87,12 @@ export default function FutureTab() {
       await upsertFuture(currentProject, value)
       setQuery('')
       await load(currentProject)
+      // Also copy the new future to the clipboard.
+      try {
+        await navigator.clipboard.writeText(value)
+      } catch {
+        /* clipboard is best-effort; the add itself succeeded */
+      }
     } catch (e) {
       window.alert(`Add failed: ${e instanceof Error ? e.message : e}`)
     }
@@ -160,15 +182,24 @@ export default function FutureTab() {
   return (
     <section className="future-tab">
       <div className="future-toolbar">
-        <input
-          className="future-input"
-          placeholder="Filter…  (Enter adds a new future)"
+        <textarea
+          ref={filterRef}
+          className="future-input future-input--filter"
+          placeholder="Filter…  (Ctrl+Enter adds a new future)"
+          rows={3}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            autosize(filterRef.current)
+          }}
+          onInput={() => autosize(filterRef.current)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault()
               void handleAdd()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              setQuery('')
             }
           }}
         />
@@ -210,13 +241,17 @@ export default function FutureTab() {
             >
               {editingId === f.future_id ? (
                 <>
-                  <input
-                    className="future-input future-input--inline"
+                  <textarea
+                    ref={editRef}
+                    className="future-input future-input--inline future-input--editor"
                     autoFocus
+                    rows={3}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
+                    onInput={() => autosize(editRef.current)}
+                    onFocus={() => autosize(editRef.current)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault()
                         void commitEdit(f.future_id)
                       } else if (e.key === 'Escape') {
