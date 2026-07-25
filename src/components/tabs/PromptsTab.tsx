@@ -64,6 +64,7 @@ export default function PromptsTab() {
   // after Esc dismisses a mention; it blocks re-opening until a fresh '/'
   // is typed, so the user can type '/' literally without the panel popping.
   const [mention, setMention] = useState<Mention | null>(null)
+  const [mentionIndex, setMentionIndex] = useState(-1)
   const suppressRef = useRef(false)
 
   // One session per page load groups prompts created during this session;
@@ -180,6 +181,22 @@ export default function PromptsTab() {
       .slice(0, 8)
   }, [mention, phrases])
 
+  // Reset the highlight whenever the set of matches changes (new '/' run or a
+  // new keystroke that filters the list), so Tab always starts at the top.
+  useEffect(() => {
+    setMentionIndex(-1)
+  }, [mentionMatches])
+
+  // Keep the highlighted option scrolled into view as Tab cycles through them.
+  const mentionPanelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (mentionIndex < 0 || !mentionPanelRef.current) return
+    const item = mentionPanelRef.current.children[mentionIndex]
+    if (item && 'scrollIntoView' in item) {
+      ;(item as HTMLElement).scrollIntoView({ block: 'nearest' })
+    }
+  }, [mentionIndex])
+
   /**
    * Insert a chosen phrase at the active mention, replacing the "/" + query
    * region, then dismiss the panel and refocus the caret just past the text.
@@ -195,6 +212,7 @@ export default function PromptsTab() {
       const next = before + phrase.phrase + after
       const caret = before.length + phrase.phrase.length
       setMention(null)
+      setMentionIndex(-1)
       setPrompt(next)
       requestAnimationFrame(() => {
         const t = textareaRef.current
@@ -212,6 +230,7 @@ export default function PromptsTab() {
   const dismissMention = useCallback(() => {
     suppressRef.current = true
     setMention(null)
+    setMentionIndex(-1)
     requestAnimationFrame(() => textareaRef.current?.focus())
   }, [])
 
@@ -233,6 +252,7 @@ export default function PromptsTab() {
       }
       setPrompt('')
       setMention(null)
+      setMentionIndex(-1)
       suppressRef.current = false
       await load(currentProject)
     } catch (e) {
@@ -379,10 +399,54 @@ export default function PromptsTab() {
               // A freshly typed '/' re-enables the picker after an Esc dismiss.
               if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
                 suppressRef.current = false
-              } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                return
+              }
+              // Ctrl/Cmd+Tab inserts a literal tab character at the caret.
+              if (e.key === 'Tab' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault()
+                const el = e.currentTarget
+                const s = el.selectionStart
+                const en = el.selectionEnd
+                const next = prompt.slice(0, s) + '\t' + prompt.slice(en)
+                const caret = s + 1
+                setPrompt(next)
+                setMention(null)
+                setMentionIndex(-1)
+                requestAnimationFrame(() => {
+                  const t = textareaRef.current
+                  if (!t) return
+                  t.focus()
+                  t.setSelectionRange(caret, caret)
+                  autosize()
+                })
+                return
+              }
+              // Enter selects the highlighted option when the panel is open.
+              if (e.key === 'Enter' && mention && mentionIndex >= 0) {
+                const match = mentionMatches[mentionIndex]
+                if (match) {
+                  e.preventDefault()
+                  selectMention(match)
+                  return
+                }
+              }
+              // Submit the prompt.
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault()
                 void submit()
-              } else if (e.key === 'Escape') {
+                return
+              }
+              // Tab navigates the panel: select the sole option, or cycle.
+              if (e.key === 'Tab' && mention && mentionMatches.length > 0) {
+                e.preventDefault()
+                if (mentionMatches.length === 1) {
+                  selectMention(mentionMatches[0])
+                } else {
+                  setMentionIndex((i) => (i + 1) % mentionMatches.length)
+                }
+                return
+              }
+              if (e.key === 'Escape') {
                 e.preventDefault()
                 if (mention) dismissMention()
                 else setPrompt('')
@@ -390,14 +454,17 @@ export default function PromptsTab() {
             }}
           />
           {mention && mentionMatches.length > 0 && (
-            <div className="prompts-mention" role="listbox" aria-label="Common phrases">
-              {mentionMatches.map((p) => (
+            <div className="prompts-mention" ref={mentionPanelRef} role="listbox" aria-label="Common phrases">
+              {mentionMatches.map((p, i) => (
                 <button
                   key={p.phrase_id}
                   type="button"
-                  className="prompts-mention-item"
+                  className={
+                    'prompts-mention-item' +
+                    (i === mentionIndex ? ' prompts-mention-item--active' : '')
+                  }
                   role="option"
-                  aria-selected={false}
+                  aria-selected={i === mentionIndex}
                   // mouseDown (not click) fires before the textarea loses focus,
                   // so the caret position we read in selectMention() is intact.
                   onMouseDown={(e) => {

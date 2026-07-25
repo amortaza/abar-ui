@@ -117,6 +117,11 @@
   background: var(--surface-2);
 }
 
+/* Keyboard-highlighted option (Tab cycling). */
+.prompts-mention-item--active {
+  background: #1e3a8a;
+}
+
 .prompts-editor > .prompts-preview {
   flex: 1;
   min-width: 0;

@@ -102,6 +102,11 @@
   background: var(--surface-2);
 }
 
+/* Keyboard-highlighted option (Tab cycling). */
+.future-mention-item--active {
+  background: #1e3a8a;
+}
+
 .future-empty,
 .future-error {
   color: var(--text-muted);
