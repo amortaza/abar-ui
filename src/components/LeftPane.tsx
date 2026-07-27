@@ -1,12 +1,14 @@
 import Tabs, { type TabDef } from './Tabs'
 import ProjectsTab from './tabs/ProjectsTab'
 import PhrasesTab from './tabs/PhrasesTab'
+import SkillsTab from './tabs/SkillsTab'
 import { useCurrentProject } from './CurrentProjectContext'
 import './LeftPane.css'
 
-/** Left pane: a tab strip over Projects / Common phrases.
+/** Left pane: a tab strip over Projects / Common phrases / Skills.
  *  The Common phrases tab is disabled until a project is selected, since
- *  its contents are scoped to the current project. */
+ *  its contents are scoped to the current project. Skills are global, so
+ *  that tab is always available. */
 export default function LeftPane() {
   const { currentProject } = useCurrentProject()
   const noProject = currentProject === null
@@ -19,6 +21,7 @@ export default function LeftPane() {
       content: <PhrasesTab />,
       disabled: noProject,
     },
+    { id: 'skills', label: 'Skills', content: <SkillsTab /> },
   ]
 
   return (

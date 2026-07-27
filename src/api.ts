@@ -3,9 +3,9 @@
 // In dev, Vite proxies /api/* -> http://127.0.0.1:5001 (see vite.config.ts),
 // so these relative URLs reach the Flask server without CORS config.
 
-import type { Future, Phrase, Prompt } from './types'
+import type { Future, Phrase, Prompt, Skill } from './types'
 
-export type { Future, Phrase, Prompt }
+export type { Future, Phrase, Prompt, Skill }
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -175,4 +175,33 @@ export function reorderFutures(
   return sendJson(`/api/futures/order?project_id=${encodeURIComponent(projectId)}`, 'POST', {
     future_ids: futureIds,
   })
+}
+
+// ---- Skills (global CRUD) ----
+// Skills are shared across projects. POST /skill body is {"text": ...}
+// (optionally {"skill_id": ...} to update in place). GET /skills returns
+// [{"skill_id": ..., "text": ...}].
+
+/** GET /api/skills -> Skill[] */
+export function fetchSkills(): Promise<Skill[]> {
+  return getJson('/api/skills')
+}
+
+/**
+ * POST /api/skill. Omit skillId to create (server generates the id);
+ * pass it to update an existing skill in place.
+ */
+export function upsertSkill(
+  text: string,
+  skillId?: string,
+): Promise<{ status: string; skill_id: string }> {
+  return sendJson('/api/skill', 'POST', {
+    text,
+    ...(skillId !== undefined ? { skill_id: skillId } : {}),
+  })
+}
+
+/** DELETE /api/skill?skill_id=Y -> {"status": "deleted" | "not_found", ...} */
+export function deleteSkill(skillId: string): Promise<{ status: string; skill_id: string }> {
+  return sendJson(`/api/skill?skill_id=${encodeURIComponent(skillId)}`, 'DELETE')
 }

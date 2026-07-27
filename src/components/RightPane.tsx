@@ -8,7 +8,7 @@ import DoneTab from './tabs/DoneTab'
 import PromptsTab from './tabs/PromptsTab'
 import ReadyTab from './tabs/ReadyTab'
 import ReviewTab from './tabs/ReviewTab'
-import WipTab from './tabs/WipTab'
+// import WipTab from './tabs/WipTab'  // WIP tab is commented out below
 import type { Prompt } from '../types'
 import './RightPane.css'
 
@@ -108,7 +108,7 @@ export default function RightPane() {
   const tabs: TabDef[] = [
     { id: 'prompts', label: `Backlog (${counts.draft})`, content: <PromptsTab />, disabled: noProject },
     { id: 'ready', label: `Ready (${counts.ready})`, content: <ReadyTab />, disabled: noProject },
-    { id: 'wip', label: `Wip (${counts.wip})`, content: <WipTab />, disabled: noProject },
+    // { id: 'wip', label: `Wip (${counts.wip})`, content: <WipTab />, disabled: noProject },
     { id: 'review', label: `Review (${counts.review})`, content: <ReviewTab />, disabled: noProject },
     { id: 'done', label: `Done (${counts.done})`, content: <DoneTab />, disabled: noProject },
   ]

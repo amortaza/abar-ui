@@ -1,44 +1,48 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { deletePhrase, fetchPhrases, upsertPhrase } from '../../api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { deleteSkill, fetchSkills, upsertSkill } from '../../api'
 import { subscribe } from '../../events'
 import { copyText } from '../../clipboard'
-import type { Phrase } from '../../types'
-import { useCurrentProject } from '../CurrentProjectContext'
-import './PhrasesTab.css'
+import type { Skill } from '../../types'
+import './SkillsTab.css'
 
-/** Sort key for a phrase: lowercase, keeping only alphanumerics and spaces. */
-function sortKey(phrase: string): string {
-  return phrase.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '')
-}
-
-/** "Common phrases" tab: list + filter + CRUD for the selected project. */
-export default function PhrasesTab() {
-  const { currentProject } = useCurrentProject()
-  const [phrases, setPhrases] = useState<Phrase[]>([])
+/**
+ * "Skills" tab: list + textbox + CRUD. Skills are global — they are not
+ * tied to a project — so this component ignores the current project and
+ * always shows the full shared list.
+ */
+export default function SkillsTab() {
+  const [skills, setSkills] = useState<Skill[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // The input at the top both filters the list (live) and, on Enter, creates
-  // a new phrase from its current value.
-  const [query, setQuery] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
+  // The textbox at the top: plain Enter adds a new skill from its value,
+  // Ctrl/Cmd+Enter inserts a literal newline so multi-line skills are
+  // possible, and Escape clears it.
   const [draft, setDraft] = useState('')
+  const draftRef = useRef<HTMLTextAreaElement>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
   const editRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-grow the edit textarea: shrink to content, then re-grow up to the
-  // CSS max-height (11 lines). The browser clamps via min/max-height.
-  const autosize = useCallback(() => {
-    const el = editRef.current
+  // Auto-grow a textarea: shrink to content, then re-grow up to the CSS
+  // max-height (11 lines). The browser clamps via min/max-height.
+  const autosize = useCallback((el: HTMLTextAreaElement | null) => {
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
   }, [])
 
-  const load = useCallback(async (projectId: string) => {
+  // Re-measure the top textbox when its value changes out of band (e.g.
+  // cleared after adding a skill or pressing Escape).
+  useEffect(() => {
+    autosize(draftRef.current)
+  }, [draft, autosize])
+
+  const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      setPhrases(await fetchPhrases(projectId))
+      setSkills(await fetchSkills())
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -47,161 +51,154 @@ export default function PhrasesTab() {
   }, [])
 
   useEffect(() => {
-    if (currentProject) void load(currentProject)
-    else setPhrases([])
-  }, [currentProject, load])
+    void load()
+  }, [load])
 
-  // Live-refresh: reload when phrases for this project change anywhere
-  // (another tab/client or an out-of-band backend write).
+  // Live-refresh: reload when skills change anywhere (another tab/client
+  // or an out-of-band backend write).
   useEffect(() => {
-    if (!currentProject) return
     return subscribe((e) => {
-      if (e.type === 'phrases' && e.project_id === currentProject) void load(currentProject)
+      if (e.type === 'skills') void load()
     })
-  }, [currentProject, load])
-
-  const queryLower = query.trim().toLowerCase()
-  const filtered = useMemo(() => {
-    const base = queryLower
-      ? phrases.filter((p) => p.phrase.toLowerCase().includes(queryLower))
-      : phrases
-    // Sort alphabetically, ignoring case and punctuation: the sort key keeps
-    // only alphanumerics and spaces.
-    return [...base].sort((a, b) =>
-      sortKey(a.phrase).localeCompare(sortKey(b.phrase)),
-    )
-  }, [phrases, queryLower])
+  }, [load])
 
   const handleAdd = async () => {
-    if (!currentProject) return
-    const value = query.trim()
+    const value = draft.trim()
     if (!value) return
     try {
-      await upsertPhrase(currentProject, value)
-      setQuery('')
-      await load(currentProject)
-      // Also copy the new phrase to the clipboard.
+      await upsertSkill(value)
+      setDraft('')
+      await load()
+      // Also copy the new skill to the clipboard.
       await copyText(value)
     } catch (e) {
       window.alert(`Add failed: ${e instanceof Error ? e.message : e}`)
     }
   }
 
-  const startEdit = (p: Phrase) => {
-    setEditingId(p.phrase_id)
-    setDraft(p.phrase)
+  const startEdit = (s: Skill) => {
+    setEditingId(s.skill_id)
+    setEditDraft(s.text)
   }
 
   const cancelEdit = () => {
     setEditingId(null)
-    setDraft('')
+    setEditDraft('')
   }
 
-  const commitEdit = async (phraseId: string) => {
-    if (!currentProject) return
-    const value = draft.trim()
+  const commitEdit = async (skillId: string) => {
+    const value = editDraft.trim()
     if (!value) {
       cancelEdit()
       return
     }
     try {
-      await upsertPhrase(currentProject, value, phraseId)
+      await upsertSkill(value, skillId)
       cancelEdit()
-      await load(currentProject)
+      await load()
     } catch (e) {
       window.alert(`Update failed: ${e instanceof Error ? e.message : e}`)
     }
   }
 
-  const handleDelete = async (p: Phrase) => {
-    if (!currentProject) return
-    if (!window.confirm(`Delete phrase "${p.phrase}"?`)) return
+  const handleDelete = async (s: Skill) => {
+    if (!window.confirm(`Delete skill "${s.text}"?`)) return
     try {
-      await deletePhrase(currentProject, p.phrase_id)
-      await load(currentProject)
+      await deleteSkill(s.skill_id)
+      await load()
     } catch (e) {
       window.alert(`Delete failed: ${e instanceof Error ? e.message : e}`)
     }
   }
 
-  const handleCopy = async (p: Phrase) => {
-    if (!(await copyText(p.phrase))) window.alert('Copy failed')
+  const handleCopy = async (s: Skill) => {
+    if (!(await copyText(s.text))) window.alert('Copy failed')
   }
 
-  const handleDuplicate = async (p: Phrase) => {
-    if (!currentProject) return
+  const handleDuplicate = async (s: Skill) => {
     try {
-      // Create a new phrase (server generates the id) with the same text.
-      await upsertPhrase(currentProject, p.phrase)
-      await load(currentProject)
+      // Create a new skill (server generates the id) with the same text.
+      await upsertSkill(s.text)
+      await load()
     } catch (e) {
       window.alert(`Duplicate failed: ${e instanceof Error ? e.message : e}`)
     }
   }
 
-  if (!currentProject) {
-    return (
-      <section className="phrases-tab">
-        <p className="phrases-empty">No project selected.</p>
-      </section>
-    )
-  }
-
   return (
-    <section className="phrases-tab">
-      <div className="phrases-toolbar">
-        <input
-          className="phrases-input"
-          placeholder="Filter…  (Enter adds a new phrase)"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+    <section className="skills-tab">
+      <div className="skills-toolbar">
+        <textarea
+          ref={draftRef}
+          className="skills-input skills-input--filter"
+          placeholder="Add a skill…  Start with a trigger like 'start_project: …' so it can be invoked via @start_project in a prompt. (Enter adds, Ctrl+Enter for a newline)"
+          rows={3}
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value)
+            autosize(draftRef.current)
+          }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            // Plain Enter adds a new skill; Ctrl/Cmd+Enter inserts a newline.
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              document.execCommand('insertText', false, '\n')
+              autosize(draftRef.current)
+              return
+            }
+            if (e.key === 'Enter' && !e.altKey) {
               e.preventDefault()
               void handleAdd()
+              return
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setDraft('')
             }
           }}
         />
       </div>
 
-      {loading && <p className="phrases-empty">Loading…</p>}
-      {error && <p className="phrases-error">Error: {error}</p>}
-      {!loading && !error && filtered.length === 0 && (
-        <p className="phrases-empty">
-          {query ? 'No matching phrases.' : 'No phrases yet.'}
-        </p>
-      )}
+      {loading && <p className="skills-empty">Loading…</p>}
+      {error && <p className="skills-error">Error: {error}</p>}
+      {!loading && !error && skills.length === 0 && <p className="skills-empty">No skills yet.</p>}
 
-      {filtered.length > 0 && (
-        <ul className="phrases-list">
-          {filtered.map((p) => (
-            <li key={p.phrase_id} className="phrases-row">
-              {editingId === p.phrase_id ? (
+      {skills.length > 0 && (
+        <ul className="skills-list">
+          {skills.map((s) => (
+            <li key={s.skill_id} className="skills-row">
+              {editingId === s.skill_id ? (
                 <>
                   <textarea
                     ref={editRef}
-                    className="phrases-input phrases-input--inline phrases-input--editor"
+                    className="skills-input skills-input--inline skills-input--editor"
                     autoFocus
                     rows={3}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onInput={autosize}
-                    onFocus={autosize}
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    onInput={() => autosize(editRef.current)}
+                    onFocus={() => autosize(editRef.current)}
                     onKeyDown={(e) => {
+                      // Plain Enter commits the edit; Ctrl/Cmd+Enter inserts a
+                      // newline (reversed from the usual textarea convention).
                       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault()
-                        void commitEdit(p.phrase_id)
+                        document.execCommand('insertText', false, '\n')
+                        autosize(editRef.current)
+                      } else if (e.key === 'Enter' && !e.altKey) {
+                        e.preventDefault()
+                        void commitEdit(s.skill_id)
                       } else if (e.key === 'Escape') {
                         e.preventDefault()
                         cancelEdit()
                       }
                     }}
                   />
-                  <span className="phrases-actions">
+                  <span className="skills-actions">
                     <button
                       className="icon-btn icon-btn--save"
                       title="Save"
-                      onClick={() => void commitEdit(p.phrase_id)}
+                      onClick={() => void commitEdit(s.skill_id)}
                     >
                       <SaveIcon />
                     </button>
@@ -216,33 +213,33 @@ export default function PhrasesTab() {
                 </>
               ) : (
                 <>
-                  <span className="phrases-text">{p.phrase}</span>
-                  <span className="phrases-actions">
+                  <span className="skills-text">{s.text}</span>
+                  <span className="skills-actions">
                     <button
                       className="icon-btn icon-btn--sm icon-btn--duplicate"
                       title="Duplicate"
-                      onClick={() => void handleDuplicate(p)}
+                      onClick={() => void handleDuplicate(s)}
                     >
                       <DuplicateIcon />
                     </button>
                     <button
                       className="icon-btn icon-btn--sm icon-btn--edit"
                       title="Edit"
-                      onClick={() => startEdit(p)}
+                      onClick={() => startEdit(s)}
                     >
                       <EditIcon />
                     </button>
                     <button
                       className="icon-btn icon-btn--sm icon-btn--copy"
                       title="Copy"
-                      onClick={() => void handleCopy(p)}
+                      onClick={() => void handleCopy(s)}
                     >
                       <CopyIcon />
                     </button>
                     <button
                       className="icon-btn icon-btn--sm icon-btn--danger icon-btn--delete"
                       title="Delete"
-                      onClick={() => void handleDelete(p)}
+                      onClick={() => void handleDelete(s)}
                     >
                       <DeleteIcon />
                     </button>

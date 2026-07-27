@@ -1,0 +1,188 @@
+.skills-tab {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.skills-toolbar {
+  margin-bottom: 8px;
+}
+
+.skills-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+/* Dark green outline on the toolbar textbox (scoped so the inline edit
+   textarea, which also uses .skills-input, is unaffected). */
+.skills-toolbar .skills-input {
+  outline: 2px solid #2da44e;
+  outline-offset: -1px;
+}
+
+.skills-input::placeholder {
+  color: var(--text-muted);
+}
+
+.skills-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.skills-input--inline {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Multi-line textarea: starts 3 lines tall, grows to 11, then scrolls. */
+.skills-input--editor,
+.skills-input--filter {
+  resize: none;
+  line-height: 1.4;
+  min-height: calc(1.4em * 3 + 12px); /* 3 lines + top/bottom padding */
+  max-height: calc(1.4em * 11 + 12px); /* 11 lines + top/bottom padding */
+  overflow-y: auto;
+  font-family: inherit;
+}
+
+.skills-empty,
+.skills-error {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.skills-error {
+  color: #f85149;
+}
+
+.skills-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.skills-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.skills-row:hover {
+  background: var(--surface-2);
+}
+
+/* Line separator between rows (skip the last). */
+.skills-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+.skills-row:hover .skills-actions {
+  opacity: 1;
+}
+
+/* Top-align the editor so save/cancel sit beside the first line. */
+.skills-row:focus-within {
+  align-items: flex-start;
+}
+
+.skills-text {
+  font-size: 13px;
+  word-break: break-word;
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
+.skills-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+/* Keep actions visible on touch / when focused within an editing row. */
+.skills-row:focus-within .skills-actions {
+  opacity: 1;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.icon-btn--danger:hover {
+  color: #f85149;
+}
+
+/* Smaller icons for the duplicate/edit/copy/delete row actions. */
+.icon-btn--sm svg {
+  width: 9px;
+  height: 9px;
+}
+
+/* Row action icons sized to 16px.
+   Scoped under .skills-row for specificity so it beats the shared
+   .icon-btn--sm svg rule bundled from other tab stylesheets. */
+.skills-row .icon-btn--duplicate svg {
+  width: 16px;
+  height: 16px;
+}
+
+.skills-row .icon-btn--edit svg {
+  width: 16px;
+  height: 16px;
+}
+
+.skills-row .icon-btn--copy svg {
+  width: 16px;
+  height: 16px;
+}
+
+.skills-row .icon-btn--delete svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Save icon (edit-mode) sized to 16px. */
+.skills-row .icon-btn--save svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Cancel icon (edit-mode) sized to 16px. */
+.skills-row .icon-btn--cancel svg {
+  width: 16px;
+  height: 16px;
+}

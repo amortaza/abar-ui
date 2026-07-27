@@ -3,7 +3,9 @@ import { createPrompt, deletePrompt, fetchPhrases, fetchPrompts } from '../../ap
 import { subscribe } from '../../events'
 import { renderMarkdown } from '../../markdown'
 import { getTabPlatform, setTabPlatform } from '../../settings'
+import { copyWithSkills } from '../../skills'
 import type { Phrase, Prompt } from '../../types'
+import { uuid } from '../../uuid'
 import { useCurrentProject } from '../CurrentProjectContext'
 import './PromptsTab.css'
 
@@ -69,7 +71,7 @@ export default function PromptsTab() {
 
   // One session per page load groups prompts created during this session;
   // reloading the page starts a new session.
-  const [sessionId] = useState(() => crypto.randomUUID())
+  const [sessionId] = useState(() => uuid())
 
   // Monotonic counter stamped onto each prompt at submit time, recording the
   // order in which prompts were submitted from this tab (most recent = highest).
@@ -198,13 +200,14 @@ export default function PromptsTab() {
       .slice(0, 8)
   }, [mention, phrases])
 
-  // Reset the highlight whenever the set of matches changes (new '/' run or a
-  // new keystroke that filters the list), so Tab always starts at the top.
+  // Default the highlight to the first option whenever the set of matches
+  // changes (new '/' run or a new keystroke that filters the list), so the
+  // picker always opens with something selected.
   useEffect(() => {
-    setMentionIndex(-1)
+    setMentionIndex(mentionMatches.length > 0 ? 0 : -1)
   }, [mentionMatches])
 
-  // Keep the highlighted option scrolled into view as Tab cycles through them.
+  // Keep the highlighted option scrolled into view as it moves.
   const mentionPanelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (mentionIndex < 0 || !mentionPanelRef.current) return
@@ -263,7 +266,7 @@ export default function PromptsTab() {
       // they group together on top of the backlog, ignoring platform.
       const seq = ++submitSeqRef.current
       for (const target of resolveTargets(platform)) {
-        const promptId = crypto.randomUUID()
+        const promptId = uuid()
         submitOrderRef.current.set(promptId, seq)
         await createPrompt(currentProject, target, {
           session_id: sessionId,
@@ -277,6 +280,10 @@ export default function PromptsTab() {
       setMentionIndex(-1)
       suppressRef.current = false
       await load(currentProject)
+      // Return focus to the prompt box so the user can keep typing the next
+      // prompt without re-clicking. rAF defers until after React re-renders
+      // (busy flips back to false, re-enabling the textarea).
+      requestAnimationFrame(() => textareaRef.current?.focus())
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -354,11 +361,12 @@ export default function PromptsTab() {
   }
 
   const handleCopy = async (p: Prompt) => {
-    try {
-      await navigator.clipboard.writeText(p.prompt)
-    } catch {
-      setError('Copy failed')
-    }
+    // Expand @trigger mentions against the global skills at copy time;
+    // an unresolved trigger aborts the copy and clears the clipboard.
+    const r = await copyWithSkills(p.prompt)
+    if (r.status === 'missing') setError(`Unknown skill trigger: ${r.missing.join(', ')}`)
+    else if (r.status === 'failed') setError('Copy failed')
+    else setError(null)
   }
 
   if (!currentProject) {
@@ -472,6 +480,16 @@ export default function PromptsTab() {
                 } else {
                   setMentionIndex((i) => (i + 1) % mentionMatches.length)
                 }
+                return
+              }
+              // ArrowUp/ArrowDown move the highlight, wrapping at the ends.
+              if (mention && mentionMatches.length > 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                e.preventDefault()
+                const n = mentionMatches.length
+                setMentionIndex((i) => {
+                  if (i < 0) return e.key === 'ArrowDown' ? 0 : n - 1
+                  return e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n
+                })
                 return
               }
               if (e.key === 'Escape') {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { deleteFuture, fetchFutures, fetchPhrases, reorderFutures, upsertFuture } from '../../api'
 import { subscribe } from '../../events'
+import { copyText } from '../../clipboard'
 import type { Future, Phrase } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
 import './FutureTab.css'
@@ -161,13 +162,14 @@ export default function FutureTab() {
       .slice(0, 8)
   }, [mention, phrases])
 
-  // Reset the highlight whenever the set of matches changes (new '/' run or a
-  // new keystroke that filters the list), so Tab always starts at the top.
+  // Default the highlight to the first option whenever the set of matches
+  // changes (new '/' run or a new keystroke that filters the list), so the
+  // picker always opens with something selected.
   useEffect(() => {
-    setMentionIndex(-1)
+    setMentionIndex(mentionMatches.length > 0 ? 0 : -1)
   }, [mentionMatches])
 
-  // Keep the highlighted option scrolled into view as Tab cycles through them.
+  // Keep the highlighted option scrolled into view as it moves.
   const mentionPanelRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (mentionIndex < 0 || !mentionPanelRef.current) return
@@ -226,11 +228,7 @@ export default function FutureTab() {
       suppressRef.current = false
       await load(currentProject)
       // Also copy the new future to the clipboard.
-      try {
-        await navigator.clipboard.writeText(value)
-      } catch {
-        /* clipboard is best-effort; the add itself succeeded */
-      }
+      await copyText(value)
     } catch (e) {
       window.alert(`Add failed: ${e instanceof Error ? e.message : e}`)
     }
@@ -274,11 +272,7 @@ export default function FutureTab() {
   }
 
   const handleCopy = async (f: Future) => {
-    try {
-      await navigator.clipboard.writeText(f.text)
-    } catch {
-      window.alert('Copy failed')
-    }
+    if (!(await copyText(f.text))) window.alert('Copy failed')
   }
 
   // Drop the dragged row (dragId) onto the target row (overId): move it to
@@ -401,6 +395,16 @@ export default function FutureTab() {
                 } else {
                   setMentionIndex((i) => (i + 1) % mentionMatches.length)
                 }
+                return
+              }
+              // ArrowUp/ArrowDown move the highlight, wrapping at the ends.
+              if (mention && mentionMatches.length > 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+                e.preventDefault()
+                const n = mentionMatches.length
+                setMentionIndex((i) => {
+                  if (i < 0) return e.key === 'ArrowDown' ? 0 : n - 1
+                  return e.key === 'ArrowDown' ? (i + 1) % n : (i - 1 + n) % n
+                })
                 return
               }
               if (e.key === 'Escape') {

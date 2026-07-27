@@ -17,6 +17,8 @@ export interface Prompt {
   prompt_id: string
   prompt: string
   state: string
+  /** ISO 8601 timestamp of the last write (may be absent on very old entries). */
+  last_modified?: string | null
 }
 
 /** GET /phrases returns an array of {phrase_id, phrase}. */
@@ -28,5 +30,11 @@ export interface Phrase {
 /** GET /futures returns an array of {future_id, text}. */
 export interface Future {
   future_id: string
+  text: string
+}
+
+/** GET /skills returns an array of {skill_id, text}. Skills are global. */
+export interface Skill {
+  skill_id: string
   text: string
 }

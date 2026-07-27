@@ -11,7 +11,7 @@
 /** A change event pushed by the server. */
 export type ServerEvent =
   | { type: 'phrases' | 'futures' | 'prompts'; project_id: string }
-  | { type: 'projects' }
+  | { type: 'projects' | 'skills' }
 
 type Handler = (event: ServerEvent) => void
 

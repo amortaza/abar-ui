@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPrompt, deletePrompt, fetchPrompts } from '../../api'
 import { subscribe } from '../../events'
 import { getTabPlatform, setTabPlatform } from '../../settings'
+import { copyWithSkills } from '../../skills'
 import type { Prompt } from '../../types'
 import { useCurrentProject } from '../CurrentProjectContext'
 // Reuse the Prompts tab styles: rows are visually identical, so we share the
@@ -68,14 +69,18 @@ export default function ReadyTab() {
 
   const targets = useMemo(() => resolveTargets(platform), [platform])
 
-  // Only ready prompts; cross-platform GET filtered client-side.
+  // Only ready prompts; cross-platform GET filtered client-side. Ordered by
+  // last_modified ascending (oldest first). Entries without a timestamp sort
+  // before all others.
   const visible = useMemo(
     () =>
-      prompts.filter(
-        (p) =>
-          p.state === 'ready' &&
-          targets.includes(p.platform as TargetPlatform),
-      ),
+      prompts
+        .filter(
+          (p) =>
+            p.state === 'ready' &&
+            targets.includes(p.platform as TargetPlatform),
+        )
+        .sort((a, b) => (a.last_modified ?? '').localeCompare(b.last_modified ?? '')),
     [prompts, targets],
   )
 
@@ -128,11 +133,12 @@ export default function ReadyTab() {
   }
 
   const handleCopy = async (p: Prompt) => {
-    try {
-      await navigator.clipboard.writeText(p.prompt)
-    } catch {
-      setError('Copy failed')
-    }
+    // Expand @trigger mentions against the global skills at copy time;
+    // an unresolved trigger aborts the copy and clears the clipboard.
+    const r = await copyWithSkills(p.prompt)
+    if (r.status === 'missing') setError(`Unknown skill trigger: ${r.missing.join(', ')}`)
+    else if (r.status === 'failed') setError('Copy failed')
+    else setError(null)
   }
 
   // Move a ready prompt forward to "review". Upserts with state 'review';
